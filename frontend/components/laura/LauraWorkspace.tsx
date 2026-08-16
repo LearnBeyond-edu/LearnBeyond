@@ -303,7 +303,7 @@ export default function LauraAIWorkspace() {
           clearInterval(interval);
           setIsGenerating(false);
         }
-      }, 30); // Faster streaming
+      }, 5); // Lightning fast streaming
     } catch (e) {
       console.error(e);
       setIsGenerating(false);

@@ -93,11 +93,9 @@ export default function AnalyticsPage() {
 
   const diagnoseStyle = (type: string) => {
     setDiagnosing(true);
-    setTimeout(() => {
-      setLearningStyle(type);
-      setDiagnosing(false);
-      toast.success(`Diagnostic finished! Recommended: ${type}`);
-    }, 1000);
+    setLearningStyle(type);
+    setDiagnosing(false);
+    toast.success(`Diagnostic finished! Recommended: ${type}`);
   };
 
   const { data: clsData } = useClasses(20);
