@@ -193,7 +193,7 @@ export default function TeacherDashboard() {
                   referrals.push({
                     id: `ref-${Date.now()}`,
                     studentId: referralStudent,
-                    userId: studentObj?.user_id || studentObj?.user?.id,
+                    userId: studentObj?.user_id,
                     studentName,
                     reason: referralReason,
                     teacherName: firstName,
