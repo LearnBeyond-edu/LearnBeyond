@@ -1,8 +1,9 @@
 export interface Attachment {
   label: string;
-  type: "video" | "pdf" | "image";
+  type: "video" | "pdf" | "image" | "youtube";
   size: string;
-  file: File;
+  file?: File;
+  url?: string;
 }
 
 const DB_NAME = "LearnBeyondDB";
@@ -57,6 +58,17 @@ export async function moveTempAttachments(lessonId: string) {
     
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function clearTempAttachments() {
+  const db = await getDB();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.delete("temp");
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
   });
 }
 

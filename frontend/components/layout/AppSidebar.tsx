@@ -59,8 +59,27 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="h-16 flex items-center px-4">
-        <h1 className="text-xl font-bold font-heading">LearnBeyond</h1>
+      <SidebarHeader className="flex items-center justify-center py-6 px-4">
+        <div className="w-full h-24 flex items-center justify-center">
+          <img 
+            src="/logo.png" 
+            alt="LearnBeyond Logo" 
+            className="hidden dark:block w-full h-full object-contain mix-blend-screen"
+            style={{ 
+              WebkitMaskImage: 'radial-gradient(circle at center, black 40%, transparent 75%)',
+              maskImage: 'radial-gradient(circle at center, black 40%, transparent 75%)'
+            }}
+          />
+          <img 
+            src="/logo1.png" 
+            alt="LearnBeyond Logo" 
+            className="block dark:hidden w-full h-full object-contain mix-blend-normal"
+            style={{ 
+              WebkitMaskImage: 'radial-gradient(circle at center, black 40%, transparent 75%)',
+              maskImage: 'radial-gradient(circle at center, black 40%, transparent 75%)'
+            }}
+          />
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

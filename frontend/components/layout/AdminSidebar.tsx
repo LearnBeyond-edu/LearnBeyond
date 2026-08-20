@@ -71,15 +71,26 @@ export function AdminSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="py-4 px-3 border-b">
-        <div className="flex items-center gap-2 px-1">
-          <div className="p-1.5 bg-primary rounded-lg">
-            <GraduationCap className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <div>
-            <p className="font-bold text-sm font-heading leading-none">LearnBeyond</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Platform Admin</p>
-          </div>
+      <SidebarHeader className="flex items-center justify-center py-6 px-4">
+        <div className="w-full h-24 flex items-center justify-center">
+          <img 
+            src="/logo.png" 
+            alt="LearnBeyond Logo" 
+            className="hidden dark:block w-full h-full object-contain mix-blend-screen"
+            style={{ 
+              WebkitMaskImage: 'radial-gradient(circle at center, black 40%, transparent 75%)',
+              maskImage: 'radial-gradient(circle at center, black 40%, transparent 75%)'
+            }}
+          />
+          <img 
+            src="/logo1.png" 
+            alt="LearnBeyond Logo" 
+            className="block dark:hidden w-full h-full object-contain mix-blend-normal"
+            style={{ 
+              WebkitMaskImage: 'radial-gradient(circle at center, black 40%, transparent 75%)',
+              maskImage: 'radial-gradient(circle at center, black 40%, transparent 75%)'
+            }}
+          />
         </div>
       </SidebarHeader>
 

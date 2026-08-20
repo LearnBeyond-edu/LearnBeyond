@@ -67,16 +67,28 @@ export function TeacherSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="py-4 px-3 border-b">
-        <div className="flex items-center gap-2.5 px-1">
-          <div className="p-1.5 bg-blue-500/20 rounded-lg">
-            <BookOpen className="h-5 w-5 text-blue-500" />
-          </div>
-          <div>
-            <p className="font-bold text-sm font-heading leading-none">Teacher Portal</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">LearnBeyond</p>
-          </div>
+      <SidebarHeader className="flex flex-col items-center justify-center pt-8 pb-4 px-4 border-b">
+        <div className="w-full h-20 flex items-center justify-center">
+          <img 
+            src="/logo.png" 
+            alt="LearnBeyond Logo" 
+            className="hidden dark:block w-full h-full object-contain mix-blend-screen"
+            style={{ 
+              WebkitMaskImage: 'radial-gradient(circle at center, black 40%, transparent 75%)',
+              maskImage: 'radial-gradient(circle at center, black 40%, transparent 75%)'
+            }}
+          />
+          <img 
+            src="/logo1.png" 
+            alt="LearnBeyond Logo" 
+            className="block dark:hidden w-full h-full object-contain mix-blend-normal"
+            style={{ 
+              WebkitMaskImage: 'radial-gradient(circle at center, black 40%, transparent 75%)',
+              maskImage: 'radial-gradient(circle at center, black 40%, transparent 75%)'
+            }}
+          />
         </div>
+        <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mt-2">Teacher Portal</span>
       </SidebarHeader>
 
       <SidebarContent className="gap-0">
