@@ -65,14 +65,24 @@ export default function CreateLessonPage() {
       await clearTempAttachments();
       setAttachments([]);
 
-      const prompt = `You are an expert teacher creating a comprehensive lesson plan about "${topic}". 
+      const prompt = `You are an expert teacher creating a highly detailed, comprehensive lesson plan about "${topic}". 
       Respond with a strict JSON object with EXACTLY these four keys:
       "title": A catchy, professional title for the lesson.
       "description": A short 1-2 sentence description suitable for middle-schoolers.
-      "content": The full lesson content formatted in Markdown. It MUST include: 
-      1) Learning Objectives
-      2) Detailed Proper Notes for the students
-      3) Assignment/Activity.
+      "content": The full lesson content in plain text format (DO NOT USE ANY MARKDOWN HEADERS like # or ##). It MUST include: 
+      1) Learning Objectives.
+      2) Highly Detailed Proper Notes for the students (Write at least 3-4 paragraphs of deep, educational content explaining the topic thoroughly). 
+      CRITICAL INSTRUCTION: You MUST include a "Simulation Calibration Target" section at the end of the notes. DO NOT list options. ONLY output the ONE set of parameters that matches the topic:
+         - If the topic is Space/Astronomy: Output ONLY "Gravity: 9.8 m/s², Velocity: 75 km/s, Thruster: ON".
+         - If the topic is Biology/Cells: Output ONLY "Microscope Fine Focus: 400, Stage Pan X: 50, Stage Pan Y: 50".
+         - If the topic is Physics/Math/Motion: Output ONLY "Mass: 50kg, Force: 80N, Friction: 10N".
+         - For all other topics: Output ONLY "Interactive Teardown Target: Successfully dissect the outer layers to reveal the internal mechanisms and core."
+      
+      4) TACTILE METADATA: You must include a "tactile_data" key in your JSON object (at the root level, NOT inside the content string). You must provide 3 layers of physical depth for the topic, and 3 logical steps for the AR simulation. Use exactly this format:
+      "tactile_data": {"title": "Interactive Teardown: [Topic Name]", "layers": [{"id": "l1", "name": "[Specific Name of Outer Layer, DO NOT use 'Outer Chassis']", "prompt": "A highly accurate, scientifically correct, photorealistic educational image of the outer physical shell of [topic], showing the real structure exactly as it exists in reality, studio lighting, hyperrealistic, 8k", "hotspots": [{"x": 30, "y": 40, "label": "[Specific Outer Part 1]"}, {"x": 70, "y": 60, "label": "[Specific Outer Part 2]"}]}, {"id": "l2", "name": "[Specific Name of Internal Mechanism]", "prompt": "A highly accurate, scientifically correct, photorealistic educational image showing the precise exposed internal mechanisms and real internal components of [topic], hyperrealistic", "hotspots": [{"x": 50, "y": 50, "label": "[Specific Internal Part]"}]}, {"id": "l3", "name": "[Specific Name of Core]", "prompt": "A highly accurate, scientifically correct, photorealistic educational image showing the absolute innermost core, physics, or microscopic foundation of [topic], hyperrealistic", "hotspots": [{"x": 50, "y": 50, "label": "[Specific Core Part]"}]}], "kinesthetic": {"title": "Simulate [Topic Name]", "items": [{"id": "item0", "label": "[Step 1 / Input 1]", "color": "blue"}, {"id": "item1", "label": "[Step 2 / Process]", "color": "amber"}, {"id": "item2", "label": "[Step 3 / Output]", "color": "emerald"}], "success": "[TOPIC] ACHIEVED", "instructions": ["1. [First instruction for placing item0].", "2. [Second instruction for placing item1].", "3. [Third instruction for placing item2]."]}}
+      Ensure the prompts describe literal, highly accurate, real-world objects. DO NOT use abstract or sci-fi descriptions unless the topic is sci-fi. Every layer MUST have an array of 2-3 hotspots pointing out specific anatomical or mechanical parts of that layer. x and y are percentages (0-100).
+      
+      5) Assignment/Activity.
       "youtube_videos": An array of EXACTLY 2 highly relevant educational YouTube video objects. Each object MUST have "title" (string) and "url". For the URL, you MUST format it EXACTLY like this search URL so it automatically searches and plays the exact proper video: "https://www.youtube.com/embed?listType=search&list=YOUR_URL_ENCODED_SEARCH_QUERY". For example, if the topic is "Voltage and Current", the url MUST be "https://www.youtube.com/embed?listType=search&list=voltage+and+current+explained+for+students".
       Return ONLY valid JSON. Do not wrap in markdown code blocks.`;
 
@@ -89,7 +99,7 @@ export default function CreateLessonPage() {
           // Fallback regex parser for invalid JSON string literal control characters (literal newlines)
           const titleMatch = jsonStr.match(/"title"\s*:\s*"([^"]*)"/i);
           const descMatch = jsonStr.match(/"description"\s*:\s*"([^"]*)"/i);
-          const contentMatch = jsonStr.match(/"content"\s*:\s*"([\s\S]*?)"\s*}/i);
+          const contentMatch = jsonStr.match(/"content"\s*:\s*"([\s\S]*?)"\s*(?:,|})/i);
           
           if (!titleMatch && !contentMatch) throw e;
           
@@ -97,13 +107,39 @@ export default function CreateLessonPage() {
             title: titleMatch ? titleMatch[1] : "",
             description: descMatch ? descMatch[1] : "",
             content: contentMatch ? contentMatch[1] : "",
-            youtube_videos: []
+            youtube_videos: [],
+            tactile_data: null
           };
+        }
+
+        // Robust fallback extraction for tactile_data if missing
+        if (!parsed.tactile_data) {
+          const startIndex = jsonStr.indexOf('"tactile_data"');
+          if (startIndex !== -1) {
+            const bracketIndex = jsonStr.indexOf('{', startIndex);
+            if (bracketIndex !== -1) {
+              let braceCount = 0;
+              let endIndex = -1;
+              for (let i = bracketIndex; i < jsonStr.length; i++) {
+                if (jsonStr[i] === '{') braceCount++;
+                if (jsonStr[i] === '}') braceCount--;
+                if (braceCount === 0) { endIndex = i; break; }
+              }
+              if (endIndex !== -1) {
+                try { parsed.tactile_data = JSON.parse(jsonStr.substring(bracketIndex, endIndex + 1)); } catch(err) {}
+              }
+            }
+          }
+        }
+        
+        let finalContent = parsed.content || aiResponse;
+        if (parsed.tactile_data) {
+           finalContent += `\n\n<!-- TACTILE_DATA: ${JSON.stringify(parsed.tactile_data)} -->`;
         }
         
         form.setValue("title", parsed.title || `Exploring ${topic}`);
         form.setValue("description", parsed.description || `An introductory lesson about ${topic}.`);
-        form.setValue("content", parsed.content || aiResponse);
+        form.setValue("content", finalContent);
 
         if (parsed.youtube_videos && Array.isArray(parsed.youtube_videos) && parsed.youtube_videos.length > 0) {
           const newAttachments: Attachment[] = [];

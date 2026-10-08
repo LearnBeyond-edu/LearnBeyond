@@ -26,6 +26,7 @@ export default function LessonViewerPage() {
   const params = useParams();
   const router = useRouter();
   const lessonId = (params.id as string) || "";
+  const lessonSeed = lessonId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) || 42;
 
   // Fetch lesson data
   const { data: lesson, isLoading, isError } = useLesson(lessonId);
@@ -49,8 +50,8 @@ export default function LessonViewerPage() {
   const [highlightColor, setHighlightColor] = useState("#fbbf24"); // yellow default
   const [highlightText, setHighlightText] = useState("");
   const [comments, setComments] = useState<{ id: string; user: string; text: string; time: string }[]>([
-    { id: "1", user: "Professor Higgins", text: "Remember to focus on the structure of the chloroplast membrane.", time: "1 hour ago" },
-    { id: "2", user: "Sam (Parent)", text: "This visual diagram was very helpful for Tommy!", time: "30 mins ago" }
+    { id: "1", user: "Professor Higgins", text: "Remember to explore all the interactive simulation tools in this lesson!", time: "1 hour ago" },
+    { id: "2", user: "Sam (Parent)", text: "The AR tools were incredibly helpful for understanding this topic.", time: "30 mins ago" }
   ]);
   const [newComment, setNewComment] = useState("");
   const [viewingFile, setViewingFile] = useState<{ label: string; type: 'video' | 'pdf' | 'image' | 'youtube'; file?: File; url?: string } | null>(null);
@@ -70,57 +71,136 @@ export default function LessonViewerPage() {
   const [arExplosion, setArExplosion] = useState(false);
 
   // --- TACTILE INSTRUMENT STATE ---
-  const [instrumentValues, setInstrumentValues] = useState<Record<string, number | boolean>>({});
+  const [instrumentValues, setInstrumentValues] = useState<Record<string, any>>({});
   const [tactileSuccess, setTactileSuccess] = useState(false);
+  
+  // Teardown state
+  const [teardownStage, setTeardownStage] = useState(0);
+  const [screwsState, setScrewsState] = useState<Record<string, number>>({});
+  const [activeScrew, setActiveScrew] = useState<string | null>(null);
+  const [layerOffset, setLayerOffset] = useState({ x: 0, y: 0 });
+  const [activeHotspot, setActiveHotspot] = useState<string | null>(null);
 
   // Dynamic Tactile Instrument Theme
-  const getInstrumentTheme = (title: string) => {
+  const getInstrumentTheme = (lesson: any) => {
+    const title = lesson?.title || "";
+    const content = lesson?.content || "";
     const t = title.toLowerCase();
+    
     if (t.includes("solar") || t.includes("planet") || t.includes("space")) {
       return {
+        mode: 'orbital',
         title: "Orbital Mechanics Console",
         bgClass: "bg-slate-900",
         controls: [
-          { id: "grav", type: "slider", label: "GRAVITY TUNER", min: 0, max: 20, target: 9.8, step: 0.1, unit: "m/s²" },
-          { id: "thruster", type: "switch", label: "MAIN THRUSTER", target: true },
-          { id: "vel", type: "slider", label: "ORBITAL VELOCITY", min: 0, max: 100, target: 75, step: 1, unit: "km/s" }
+          { id: "grav", type: "slider", target: 9.8, min: 0, max: 20 },
+          { id: "vel", type: "slider", target: 75, min: 0, max: 100 },
+          { id: "thruster", type: "switch", target: true }
         ],
         successText: "ORBIT STABILIZED"
       };
     }
     if (t.includes("cell") || t.includes("biol") || t.includes("plant") || t.includes("animal")) {
       return {
+        mode: 'microscope',
         title: "Microscope Control Panel",
         bgClass: "bg-emerald-950",
         controls: [
-          { id: "zoom", type: "slider", label: "MAGNIFICATION", min: 100, max: 1000, target: 400, step: 50, unit: "x" },
-          { id: "light", type: "switch", label: "UV ILLUMINATOR", target: true },
-          { id: "focus", type: "slider", label: "FINE FOCUS", min: 0, max: 10, target: 7.5, step: 0.5, unit: "mm" }
+          { id: "focus", type: "slider", target: 400, min: 100, max: 1000 },
+          { id: "panX", type: "slider", target: 50, min: 0, max: 100 },
+          { id: "panY", type: "slider", target: 50, min: 0, max: 100 }
         ],
         successText: "SPECIMEN RESOLVED"
       };
     }
-    return {
-      title: "Diagnostic Dashboard",
+    
+    if (t.includes("physic") || t.includes("law") || t.includes("newton") || t.includes("force") || t.includes("motion") || t.includes("energy")) {
+       return {
+         mode: 'physics',
+         title: "Physics Simulator",
+         bgClass: "bg-indigo-950",
+         controls: [
+           { id: "mass", type: "slider", target: 50, min: 1, max: 100 },
+           { id: "force", type: "slider", target: 80, min: 0, max: 100 },
+           { id: "friction", type: "slider", target: 10, min: 0, max: 50 }
+         ],
+         successText: "KINETIC ENERGY STABILIZED"
+       };
+    }
+    
+    // Interactive Teardown Fallback
+    let fallbackTheme = {
+      mode: 'teardown',
+      title: "Interactive Teardown",
       bgClass: "bg-slate-950",
-      controls: [
-        { id: "volt", type: "slider", label: "INPUT VOLTAGE", min: 0, max: 12, target: 5, step: 0.5, unit: "V" },
-        { id: "pwr", type: "switch", label: "SYSTEM POWER", target: true },
-        { id: "freq", type: "slider", label: "FREQUENCY", min: 0, max: 100, target: 60, step: 5, unit: "Hz" }
+      layers: [
+        {
+          id: "l1",
+          name: "Outer Chassis",
+          prompt: "Highly detailed macro photography of a metallic chassis, studio lighting, hyperrealistic, 8k",
+          screws: [{id:'s0', x: 15, y: 20}, {id:'s1', x: 85, y: 20}, {id:'s2', x: 15, y: 80}, {id:'s3', x: 85, y: 80}],
+          hotspots: [{ x: 30, y: 30, label: "Outer Shell" }, { x: 70, y: 70, label: "Surface Casing" }]
+        },
+        {
+          id: "l2",
+          name: "Internal Mechanism",
+          prompt: "Highly detailed macro photography of complex internal gears and circuits, hyperrealistic",
+          hotspots: [{ x: 50, y: 50, label: "Main Processor / Gear" }]
+        },
+        {
+          id: "l3",
+          name: "Core Essence",
+          prompt: "Highly detailed macro photography of a glowing energy core, hyperrealistic",
+          hotspots: [{ x: 50, y: 50, label: "Absolute Core" }]
+        }
       ],
-      successText: "SYSTEM CALIBRATED"
+      controls: [],
+      successText: "CORE REVEALED"
     };
+
+    if (content) {
+      const match = content.match(/<!--\s*TACTILE_DATA:\s*([\s\S]*?)\s*-->/);
+      if (match && match[1]) {
+        try {
+          const parsed = JSON.parse(match[1].trim());
+          if (parsed.title && parsed.layers) {
+            fallbackTheme.title = parsed.title;
+            // Merge in the AI prompts, names, and hotspots
+            for (let i = 0; i < 3; i++) {
+               if (parsed.layers[i]) {
+                  fallbackTheme.layers[i].prompt = parsed.layers[i].prompt || fallbackTheme.layers[i].prompt;
+                  fallbackTheme.layers[i].name = parsed.layers[i].name || fallbackTheme.layers[i].name;
+                  if (parsed.layers[i].hotspots && parsed.layers[i].hotspots.length > 0) {
+                      (fallbackTheme.layers[i] as any).hotspots = parsed.layers[i].hotspots;
+                  }
+               }
+            }
+          }
+        } catch(e) { console.error("Failed to parse tactile data"); }
+      }
+    }
+
+    return fallbackTheme;
   };
 
-  const checkInstrumentSuccess = (newValues: Record<string, number | boolean>, theme: any) => {
+  const checkInstrumentSuccess = (newValues: Record<string, any>, theme: any) => {
     let success = true;
-    for (const ctrl of theme.controls) {
-      const val = newValues[ctrl.id];
-      if (val === undefined) { success = false; break; }
-      if (ctrl.type === "slider") {
-        if (Math.abs((val as number) - ctrl.target) > 0.01) { success = false; break; }
+    
+    if (theme.mode === 'teardown') {
+      if (newValues['teardown_success']) {
+         success = true;
       } else {
-        if (val !== ctrl.target) { success = false; break; }
+         success = false;
+      }
+    } else {
+      for (const ctrl of theme.controls) {
+        const val = newValues[ctrl.id];
+        if (val === undefined) { success = false; break; }
+        if (ctrl.type === "slider") {
+          if (Math.abs((val as number) - (ctrl.target as number)) > 0.01) { success = false; break; }
+        } else {
+          if (val !== ctrl.target) { success = false; break; }
+        }
       }
     }
     
@@ -130,11 +210,13 @@ export default function LessonViewerPage() {
     }
   };
 
-  const handleInstrumentChange = (id: string, value: number | boolean, theme: any) => {
+  const handleInstrumentChange = (id: string, value: any, theme: any) => {
     const newValues = { ...instrumentValues, [id]: value };
     setInstrumentValues(newValues);
     checkInstrumentSuccess(newValues, theme);
   };
+
+  // Removed Particle Engine Loop
   useEffect(() => {
     let animationFrameId: number;
     let previousImageData: ImageData | null = null;
@@ -161,39 +243,75 @@ export default function LessonViewerPage() {
             const gDiff = Math.abs(currentImageData.data[i+1] - previousImageData.data[i+1]);
             const bDiff = Math.abs(currentImageData.data[i+2] - previousImageData.data[i+2]);
             
-            // Very high threshold to ignore subtle skin tone shadows and face movements
-            if (rDiff + gDiff + bDiff > 150) {
+            // Lowered threshold (40) to accurately detect dark hand silhouettes in backlit/HDR rooms
+            if (rDiff + gDiff + bDiff > 40) {
               motionPixels.push({x, y});
             }
           }
         }
         
-        // FACE IGNORE LOGIC: Find the *highest* moving object (the raised hand)
-        if (motionPixels.length > 2) {
-          // Sort ascending by Y (top of screen = 0)
-          motionPixels.sort((a, b) => a.y - b.y);
-          
-          // Take the top 8 pixels to form a stable center point for the hand (ignoring the face below it)
-          const handPixels = motionPixels.slice(0, 8);
-          const avgX = handPixels.reduce((sum, p) => sum + p.x, 0) / handPixels.length;
-          const avgY = handPixels.reduce((sum, p) => sum + p.y, 0) / handPixels.length;
-          
-          // Invert X because the video is mirrored
-          const rawX = (avgX / canvas.width) * 100;
-          const mappedX = 100 - rawX; 
-          const mappedY = (avgY / canvas.height) * 100;
-          
-          setArCursor(prev => {
-            const dx = mappedX - prev.x;
-            const dy = mappedY - prev.y;
-            // Deadzone to stop micro-jitters
-            if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return prev;
-            return {
-              // Responsive but smooth lerp (0.35) so it doesn't drag/drop slowly!
-              x: prev.x + dx * 0.35,
-              y: prev.y + dy * 0.35
-            };
-          });
+        // AUTO-EXPOSURE & GRAIN REJECTION LOGIC
+        // If > 2000 pixels move at once, it's a camera auto-exposure flash. Ignore the frame entirely.
+        if (motionPixels.length > 5 && motionPixels.length < 2000) {
+          // Cluster pixels into vertical 40px columns to find the solid arm/hand, ignoring scattered ISO grain noise
+          const columns: Record<number, {x: number, y: number}[]> = {};
+          for (const p of motionPixels) {
+             const colIndex = Math.floor(p.x / 40);
+             if (!columns[colIndex]) columns[colIndex] = [];
+             columns[colIndex].push(p);
+          }
+
+          let densestCol = -1;
+          let maxCount = 0;
+          for (const key in columns) {
+             if (columns[key].length > maxCount) {
+                maxCount = columns[key].length;
+                densestCol = parseInt(key);
+             }
+          }
+
+          // If the densest column has enough mass to be a physical hand (ignoring single-pixel noise clusters)
+          if (maxCount > 3) {
+            const handCluster: {x: number, y: number}[] = [];
+            if (columns[densestCol - 1]) handCluster.push(...columns[densestCol - 1]);
+            handCluster.push(...columns[densestCol]);
+            if (columns[densestCol + 1]) handCluster.push(...columns[densestCol + 1]);
+
+            // Sort ascending by Y (top of screen = 0) to find the fingertips
+            handCluster.sort((a, b) => a.y - b.y);
+            
+            // Take the absolute top 30 pixels of this dense cluster to form the highly stable fingertip center
+            const sampleSize = Math.min(30, handCluster.length);
+            const tipPixels = handCluster.slice(0, sampleSize);
+            
+            const avgX = tipPixels.reduce((sum, p) => sum + p.x, 0) / sampleSize;
+            const avgY = tipPixels.reduce((sum, p) => sum + p.y, 0) / sampleSize;
+            
+            // Invert X because the video is mirrored
+            const rawX = (avgX / canvas.width) * 100;
+            const mappedX = 100 - rawX; 
+            const mappedY = (avgY / canvas.height) * 100;
+            
+            setArCursor(prev => {
+              const dx = mappedX - prev.x;
+              const dy = mappedY - prev.y;
+              
+              // VELOCITY CLAMPING (Replaces the broken momentum trap)
+              // Instead of freezing the cursor when the hand moves too fast, we simply cap the maximum speed.
+              // It can move a max of 20% of the screen per frame. This eliminates instant teleportation glitches 
+              // while easily allowing the cursor to reach the far corners!
+              const clamp = 20;
+              const clampedDx = Math.max(-clamp, Math.min(clamp, dx));
+              const clampedDy = Math.max(-clamp, Math.min(clamp, dy));
+
+              // Deadzone (1.0%) to freeze the cursor when the hand stops moving
+              if (Math.abs(clampedDx) < 1.0 && Math.abs(clampedDy) < 1.0) return prev;
+              return {
+                x: prev.x + clampedDx * 0.8,
+                y: prev.y + clampedDy * 0.8
+              };
+            });
+          }
         }
       }
       
@@ -276,9 +394,39 @@ export default function LessonViewerPage() {
   const [circuit, setCircuit] = useState({ item0: false, item1: false, item2: false });
   const isCircuitComplete = circuit.item0 && circuit.item1 && circuit.item2;
 
-  // Dynamic Tactile Theme based on Lesson Title
-  const getTactileTheme = (title: string) => {
+  // Dynamic Tactile Theme based on Lesson
+  const getTactileTheme = (lesson: any) => {
+    const title = lesson?.title || "";
     const t = title.toLowerCase();
+    
+    // Check if AI generated dynamic kinesthetic metadata
+    const content = lesson?.content || "";
+    if (content) {
+      const match = content.match(/<!--\s*TACTILE_DATA:\s*([\s\S]*?)\s*-->/);
+      if (match && match[1]) {
+        try {
+          const parsed = JSON.parse(match[1].trim());
+          if (parsed.kinesthetic) {
+            return {
+              title: parsed.kinesthetic.title || "Simulate Process",
+              items: parsed.kinesthetic.items || [
+                { id: "item0", label: "INPUT", color: "blue" },
+                { id: "item1", label: "PROCESS", color: "amber" },
+                { id: "item2", label: "OUTPUT", color: "emerald" }
+              ],
+              success: parsed.kinesthetic.success || "PROCESS COMPLETE!",
+              layout: 'linear',
+              bgClass: "bg-slate-950 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:24px_24px]",
+              instructions: parsed.kinesthetic.instructions || [
+                "1. Place the first component.",
+                "2. Place the second component.",
+                "3. Place the final component."
+              ]
+            };
+          }
+        } catch(e) {}
+      }
+    }
     if (t.includes("solar") || t.includes("planet") || t.includes("space")) {
       return {
         title: "Assemble the Solar System",
@@ -692,96 +840,392 @@ export default function LessonViewerPage() {
               </div>
             </TabsContent>
 
-            {/* TAB: TACTILE SANDBOX (HEAVY INSTRUMENT PANEL) */}
+            {/* TAB: TACTILE SANDBOX */}
             <TabsContent value="tactile" className="mt-0 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {(() => {
-                const iTheme = getInstrumentTheme(lesson?.title || "");
+                const iTheme = getInstrumentTheme(lesson);
                 return (
                   <div className={`relative w-full min-h-[550px] border-4 border-slate-800 rounded-3xl overflow-hidden shadow-2xl p-8 flex flex-col ${iTheme.bgClass}`}>
-                    
                     {/* Metal Panel Background Texture */}
                     <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000040_2px,transparent_2px),linear-gradient(to_bottom,#00000040_2px,transparent_2px)] bg-[size:100px_100px] opacity-20 pointer-events-none mix-blend-overlay"></div>
                     
-                    {/* Header */}
-                    <div className="relative z-10 border-b-2 border-white/10 pb-6 mb-8 flex justify-between items-end">
-                      <div>
-                        <h2 className="text-3xl font-black text-white/90 font-heading tracking-wider uppercase drop-shadow-md">{iTheme.title}</h2>
-                        <p className="text-teal-400 font-mono text-sm mt-2 flex items-center gap-2">
-                          <span className="w-2 h-2 bg-teal-500 rounded-full animate-pulse"></span>
-                          CALIBRATE ALL SYSTEMS TO REQUIRED PARAMETERS
-                        </p>
-                      </div>
-                      <div className="px-4 py-2 bg-black/50 border border-white/10 rounded-lg text-white/40 font-mono text-xs">
-                        SYS_ID: {lessonId.substring(0,8).toUpperCase()}
-                      </div>
-                    </div>
-
-                    {/* Controls Grid */}
-                    <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-8 flex-1">
-                      {iTheme.controls.map(ctrl => {
-                        // Ensure a default value is present for the UI before user interaction
-                        const val: number | boolean = instrumentValues[ctrl.id] ?? (ctrl.type === 'slider' ? (ctrl.min || 0) : false);
+                    {/* MODE: INTERACTIVE TEARDOWN */}
+                    {iTheme.mode === 'teardown' && (
+                      <div className="relative z-10 flex flex-col h-full w-full flex-1 items-center justify-between">
+                        <div className="text-center mb-8 relative z-20 pointer-events-none">
+                          <h2 className="text-3xl text-teal-400 font-black font-heading tracking-wider uppercase drop-shadow-md">{iTheme.title}</h2>
+                          <p className="text-slate-400 font-mono text-sm mt-2">PHYSICALLY TEAR DOWN THE STRUCTURE TO REVEAL THE CORE</p>
+                        </div>
                         
-                        const isMatched = ctrl.type === 'slider' 
-                          ? Math.abs((val as number) - (ctrl.target as number)) <= 0.01 
-                          : val === ctrl.target;
-                          
-                        return (
-                          <div key={ctrl.id} className="bg-black/40 border-2 border-white/5 rounded-2xl p-6 flex flex-col items-center justify-between shadow-xl backdrop-blur-sm relative overflow-hidden group">
-                            
-                            {/* Status Indicator */}
-                            <div className="absolute top-4 right-4 flex items-center gap-2">
-                              <span className={`text-[10px] font-bold font-mono ${isMatched ? 'text-emerald-400' : 'text-slate-500'}`}>{isMatched ? 'LOCKED' : 'UNSTABLE'}</span>
-                              <div className={`w-2 h-2 rounded-full ${isMatched ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]' : 'bg-slate-700'}`}></div>
-                            </div>
+                        {/* CURRENT LAYER HUD IDENTIFIER */}
+                        <div className="absolute bottom-8 left-8 z-30 bg-black/80 backdrop-blur-md border border-teal-900 rounded-xl p-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                           <p className="text-teal-600 font-mono text-[10px] tracking-widest uppercase mb-1">PART IDENTIFICATION RADAR</p>
+                           <h3 className="text-teal-300 font-mono font-bold text-lg tracking-wider">
+                              {activeHotspot ? activeHotspot.toUpperCase() : (
+                                teardownStage === 0 ? ((iTheme as any).layers[0].name.toUpperCase()) :
+                                teardownStage === 1 ? ((iTheme as any).layers[1].name.toUpperCase()) :
+                                ((iTheme as any).layers[2].name.toUpperCase())
+                              )}
+                           </h3>
+                        </div>
+                        
+                        <div className="relative w-full max-w-2xl flex-1 flex flex-col items-center justify-center">
+                            {/* LAYER 3: CORE ESSENCE */}
+                           <div className={`absolute inset-0 m-auto w-[400px] h-[400px] flex items-center justify-center transition-all duration-1000 delay-500 ${teardownStage >= 2 ? 'opacity-100 scale-100' : 'opacity-0 scale-50 pointer-events-none'}`}>
+                              <img src={`https://image.pollinations.ai/prompt/${encodeURIComponent((iTheme as any).layers[2].prompt)}?width=400&height=400&nologo=true&seed=${lessonSeed}`} alt="Core" className="w-full h-full object-cover rounded-full shadow-[0_0_150px_rgba(45,212,191,0.5)] border-[4px] border-teal-400/50" />
+                              {/* Hotspots for Layer 3 */}
+                              {teardownStage >= 2 && ((iTheme as any).layers[2].hotspots || []).map((hotspot: any, idx: number) => (
+                                 <div 
+                                    key={idx}
+                                    className="absolute z-40"
+                                    style={{ left: `${hotspot.x}%`, top: `${hotspot.y}%` }}
+                                 >
+                                    {/* Center Target */}
+                                    <div 
+                                      className="absolute -ml-1 -mt-1 w-2 h-2 rounded-full bg-teal-400 shadow-[0_0_15px_#2dd4bf] cursor-crosshair hover:scale-150 transition-all"
+                                      onMouseEnter={() => setActiveHotspot(hotspot.label)}
+                                      onMouseLeave={() => setActiveHotspot(null)}
+                                    >
+                                       <div className="absolute -inset-2 rounded-full border border-teal-400/50 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite] pointer-events-none"></div>
+                                    </div>
 
-                            <div className="text-center w-full mb-8 mt-2">
-                              <h4 className="text-slate-300 font-bold tracking-widest text-sm uppercase">{ctrl.label}</h4>
-                              <p className="text-slate-500 font-mono text-[10px] mt-1">TARGET: {ctrl.target} {ctrl.unit || ''}</p>
-                            </div>
+                                    {/* AR Tech Line */}
+                                    <div className="absolute left-1 top-[-1px] w-[25px] h-[1px] bg-teal-400/60 origin-left -rotate-45 pointer-events-none"></div>
+                                    <div className="absolute left-[18px] top-[-18px] w-[60px] h-[1px] bg-teal-400/60 pointer-events-none"></div>
+                                    
+                                    {/* Floating Label */}
+                                    <div className="absolute left-[18px] top-[-34px] whitespace-nowrap text-teal-200 font-mono text-[9px] tracking-widest uppercase drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] pointer-events-none font-bold">
+                                       {hotspot.label}
+                                    </div>
+                                 </div>
+                              ))}
+                           </div>
 
-                            {/* Slider Control */}
-                            {ctrl.type === 'slider' && (
-                              <div className="flex flex-col items-center w-full gap-6">
-                                <div className="text-4xl font-light font-mono text-white/90 bg-black/60 px-6 py-3 rounded-xl border border-white/10 shadow-inner w-full text-center">
-                                  {Number(val).toFixed((ctrl.step || 1) % 1 === 0 ? 0 : 1)} <span className="text-lg text-slate-500">{ctrl.unit}</span>
-                                </div>
-                                <input 
-                                  type="range" 
-                                  min={ctrl.min || 0} max={ctrl.max || 100} step={ctrl.step || 1} 
-                                  value={val as number}
-                                  onChange={(e) => handleInstrumentChange(ctrl.id, parseFloat(e.target.value), iTheme)}
-                                  className="w-full h-3 bg-slate-800 rounded-lg appearance-none cursor-pointer outline-none border border-slate-700 shadow-inner accent-teal-500 transition-all hover:accent-teal-400"
-                                />
-                                <div className="w-full flex justify-between text-slate-600 font-mono text-[10px] font-bold px-1">
-                                  <span>{ctrl.min}</span>
-                                  <span>{ctrl.max}</span>
-                                </div>
-                              </div>
-                            )}
+                           {/* LAYER 2: INTERNAL MECHANISM */}
+                           <div 
+                              className={`absolute inset-0 m-auto w-[450px] h-[450px] rounded-[40px] overflow-hidden shadow-2xl transition-all duration-1000 ${teardownStage >= 2 ? 'opacity-0 scale-150 blur-xl pointer-events-none' : teardownStage === 1 ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'}`}
+                           >
+                              <img src={`https://image.pollinations.ai/prompt/${encodeURIComponent((iTheme as any).layers[1].prompt)}?width=450&height=450&nologo=true&seed=${lessonSeed}`} alt="Mechanism" className="w-full h-full object-cover" />
+                              {/* Hotspots for Layer 2 */}
+                              {teardownStage === 1 && ((iTheme as any).layers[1].hotspots || []).map((hotspot: any, idx: number) => (
+                                 <div 
+                                    key={idx}
+                                    className="absolute z-40"
+                                    style={{ left: `${hotspot.x}%`, top: `${hotspot.y}%` }}
+                                 >
+                                    {/* Center Target */}
+                                    <div 
+                                      className="absolute -ml-1 -mt-1 w-2 h-2 rounded-full bg-teal-400 shadow-[0_0_15px_#2dd4bf] cursor-crosshair hover:scale-150 transition-all"
+                                      onMouseEnter={() => setActiveHotspot(hotspot.label)}
+                                      onMouseLeave={() => setActiveHotspot(null)}
+                                    >
+                                       <div className="absolute -inset-2 rounded-full border border-teal-400/50 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite] pointer-events-none"></div>
+                                    </div>
 
-                            {/* Switch Control */}
-                            {ctrl.type === 'switch' && (
-                              <div className="flex flex-col items-center flex-1 justify-center">
-                                <div 
-                                  onClick={() => handleInstrumentChange(ctrl.id, !val, iTheme)}
-                                  className={`relative w-24 h-32 rounded-xl flex items-center justify-center cursor-pointer transition-all duration-300 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)] border-4 ${val ? 'bg-slate-800 border-teal-900' : 'bg-slate-900 border-slate-800'}`}
-                                >
-                                  {/* The physical switch toggle */}
-                                  <div className={`absolute w-16 h-14 rounded shadow-2xl transition-all duration-300 border-y-4 ${val ? 'bg-teal-500 top-4 border-teal-400 shadow-[0_10px_20px_rgba(20,184,166,0.4)]' : 'bg-slate-700 bottom-4 border-slate-600'}`}>
-                                    <div className="w-full h-1/2 border-b border-black/20"></div>
+                                    {/* AR Tech Line */}
+                                    <div className="absolute left-1 top-[-1px] w-[25px] h-[1px] bg-teal-400/60 origin-left -rotate-45 pointer-events-none"></div>
+                                    <div className="absolute left-[18px] top-[-18px] w-[60px] h-[1px] bg-teal-400/60 pointer-events-none"></div>
+                                    
+                                    {/* Floating Label */}
+                                    <div className="absolute left-[18px] top-[-34px] whitespace-nowrap text-teal-200 font-mono text-[9px] tracking-widest uppercase drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] pointer-events-none font-bold">
+                                       {hotspot.label}
+                                    </div>
+                                 </div>
+                              ))}
+                              
+                              {/* Mechanism Plate to click/drag away */}
+                              {teardownStage === 1 && (
+                                 <div 
+                                    className="absolute inset-0 cursor-grab active:cursor-grabbing flex items-center justify-center bg-black/40 hover:bg-black/20 transition-colors border-4 border-dashed border-teal-500/50"
+                                    onPointerDown={(e) => {
+                                       (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                                       setLayerOffset({ x: e.clientX, y: e.clientY });
+                                    }}
+                                    onPointerMove={(e) => {
+                                       if (e.buttons === 1) {
+                                          const dx = e.clientX - layerOffset.x;
+                                          const dy = e.clientY - layerOffset.y;
+                                          if (Math.abs(dx) > 200 || Math.abs(dy) > 200) { // Dragged it far enough
+                                             setTeardownStage(2);
+                                             handleInstrumentChange('teardown_success', true, iTheme);
+                                          }
+                                          (e.currentTarget as HTMLElement).style.transform = `translate(${dx}px, ${dy}px) rotate(${dx*0.1}deg)`;
+                                       }
+                                    }}
+                                    onPointerUp={(e) => {
+                                       if (teardownStage === 1) {
+                                          (e.currentTarget as HTMLElement).style.transform = 'translate(0px, 0px) rotate(0deg)';
+                                       }
+                                    }}
+                                 >
+                                    <span className="text-teal-400 font-mono font-bold tracking-widest text-lg drop-shadow-md bg-black/60 px-6 py-2 rounded-full border border-teal-500 pointer-events-none">DRAG TO REVEAL</span>
+                                 </div>
+                              )}
+                           </div>
+
+                           {/* LAYER 1: OUTER CHASSIS */}
+                           <div 
+                              className={`absolute inset-0 m-auto w-[500px] h-[500px] rounded-[60px] overflow-hidden shadow-[0_30px_60px_rgba(0,0,0,0.9)] transition-all duration-1000 ${teardownStage >= 1 ? 'opacity-0 scale-125 blur-lg pointer-events-none' : 'opacity-100 scale-100'}`}
+                           >
+                              <img src={`https://image.pollinations.ai/prompt/${encodeURIComponent((iTheme as any).layers[0].prompt)}?width=500&height=500&nologo=true&seed=${lessonSeed}`} alt="Chassis" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(0,0,0,0.8)] border-[6px] border-slate-900/40 rounded-[60px] pointer-events-none"></div>
+                              
+                              {/* Hotspots for Layer 1 */}
+                              {teardownStage === 0 && ((iTheme as any).layers[0].hotspots || []).map((hotspot: any, idx: number) => (
+                                 <div 
+                                    key={idx}
+                                    className="absolute z-40"
+                                    style={{ left: `${hotspot.x}%`, top: `${hotspot.y}%` }}
+                                 >
+                                    {/* Center Target */}
+                                    <div 
+                                      className="absolute -ml-1 -mt-1 w-2 h-2 rounded-full bg-teal-400 shadow-[0_0_15px_#2dd4bf] cursor-crosshair hover:scale-150 transition-all"
+                                      onMouseEnter={() => setActiveHotspot(hotspot.label)}
+                                      onMouseLeave={() => setActiveHotspot(null)}
+                                    >
+                                       <div className="absolute -inset-2 rounded-full border border-teal-400/50 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite] pointer-events-none"></div>
+                                    </div>
+
+                                    {/* AR Tech Line */}
+                                    <div className="absolute left-1 top-[-1px] w-[25px] h-[1px] bg-teal-400/60 origin-left -rotate-45 pointer-events-none"></div>
+                                    <div className="absolute left-[18px] top-[-18px] w-[60px] h-[1px] bg-teal-400/60 pointer-events-none"></div>
+                                    
+                                    {/* Floating Label */}
+                                    <div className="absolute left-[18px] top-[-34px] whitespace-nowrap text-teal-200 font-mono text-[9px] tracking-widest uppercase drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] pointer-events-none font-bold">
+                                       {hotspot.label}
+                                    </div>
+                                 </div>
+                              ))}
+                              
+                              {/* The Screws */}
+                              {teardownStage === 0 && ((iTheme as any).layers[0].screws || []).map((screw: any) => {
+                                 const progress = screwsState[screw.id] || 0;
+                                 const isPopped = progress >= 100;
+                                 
+                                 return (
+                                    <div 
+                                       key={screw.id}
+                                       className={`absolute w-20 h-20 -ml-10 -mt-10 rounded-full flex items-center justify-center transition-all ${isPopped ? 'opacity-0 scale-150 pointer-events-none' : 'cursor-none hover:bg-white/10'}`}
+                                       style={{ left: `${screw.x}%`, top: `${screw.y}%` }}
+                                       onPointerDown={(e) => {
+                                          if (isPopped) return;
+                                          setActiveScrew(screw.id);
+                                          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                                          setLayerOffset({ x: e.clientX, y: e.clientY }); // Track scrub starting pos
+                                       }}
+                                       onPointerMove={(e) => {
+                                          if (activeScrew === screw.id && e.buttons === 1) {
+                                             const dx = Math.abs(e.clientX - layerOffset.x);
+                                             const dy = Math.abs(e.clientY - layerOffset.y);
+                                             const movement = dx + dy;
+                                             
+                                             if (movement > 10) {
+                                                // Scrubbing adds progress
+                                                setScrewsState(prev => {
+                                                   const newProgress = Math.min(100, (prev[screw.id] || 0) + movement * 0.1);
+                                                   
+                                                   // Check if all screws popped
+                                                   let allPopped = true;
+                                                   for (const s of (iTheme as any).layers[0].screws) {
+                                                      if (s.id === screw.id) {
+                                                         if (newProgress < 100) allPopped = false;
+                                                      } else {
+                                                         if ((prev[s.id] || 0) < 100) allPopped = false;
+                                                      }
+                                                   }
+                                                   
+                                                   if (newProgress >= 100 && allPopped) {
+                                                      setTimeout(() => setTeardownStage(1), 500); // Pop layer
+                                                   }
+                                                   
+                                                   return { ...prev, [screw.id]: newProgress };
+                                                });
+                                                setLayerOffset({ x: e.clientX, y: e.clientY }); // Reset
+                                             }
+                                          }
+                                       }}
+                                       onPointerUp={() => setActiveScrew(null)}
+                                    >
+                                       {/* Physical Screw Graphic */}
+                                       <div 
+                                          className={`w-12 h-12 rounded-full bg-[radial-gradient(circle_at_30%_30%,_#94a3b8,_#334155)] shadow-[0_5px_10px_rgba(0,0,0,0.8),inset_0_-2px_5px_rgba(0,0,0,0.5)] border-2 border-slate-900 flex items-center justify-center`}
+                                          style={{ transform: `rotate(${progress * 15}deg)` }} // Rotates extremely fast as they scrub
+                                       >
+                                          {/* Crosshead / Phillips */}
+                                          <div className="absolute w-8 h-1 bg-slate-900/80 rounded-full shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]"></div>
+                                          <div className="absolute w-1 h-8 bg-slate-900/80 rounded-full shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]"></div>
+                                       </div>
+                                       
+                                       {/* Active Scrubbing Overlay */}
+                                       {activeScrew === screw.id && !isPopped && (
+                                          <>
+                                             <div className="fixed w-16 h-16 pointer-events-none rounded-full border-4 border-dashed border-teal-400 animate-[spin_1s_linear_infinite]" style={{ left: layerOffset.x - 32, top: layerOffset.y - 32 }}></div>
+                                             <div className="absolute w-24 h-24 rounded-full border-4 border-slate-700/50">
+                                                <div className="absolute bottom-0 left-0 h-full w-full bg-teal-500/30 rounded-full transition-all" style={{ clipPath: `inset(${100 - progress}% 0 0 0)` }}></div>
+                                             </div>
+                                          </>
+                                       )}
+                                    </div>
+                                 );
+                              })}
+                           </div>
+                           
+                        </div>
+                      </div>
+                    )}
+
+                    {/* MODE: MICROSCOPE (Biology) */}
+                    {iTheme.mode === 'microscope' && (
+                      <div className="relative z-10 flex flex-col h-full w-full flex-1">
+                        <div className="text-center mb-8"><h2 className="text-3xl text-emerald-400 font-black font-heading tracking-wider uppercase drop-shadow-md">{iTheme.title}</h2></div>
+                        <div className="flex-1 flex flex-col md:flex-row gap-12 items-center justify-center">
+                          {(() => {
+                            const focus = (instrumentValues['focus'] as number) ?? 100;
+                            const panX = (instrumentValues['panX'] as number) ?? 0;
+                            const panY = (instrumentValues['panY'] as number) ?? 0;
+                            const blurAmount = Math.abs(focus - 400) / 20;
+                            return (
+                              <>
+                                <div className="w-80 h-80 md:w-96 md:h-96 rounded-full border-[12px] border-slate-800 bg-black shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden relative cursor-crosshair">
+                                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-900/40 to-transparent pointer-events-none z-20"></div>
+                                  <div className="w-full h-full flex items-center justify-center transition-all duration-75" style={{ filter: `blur(${blurAmount}px)`, transform: `translate(${(panX - 50) * 2}px, ${(panY - 50) * 2}px)` }}>
+                                    <div className="w-32 h-32 bg-emerald-500/30 rounded-[40%_60%_70%_30%/40%_50%_60%_50%] animate-[pulse_4s_infinite] border-2 border-emerald-400 flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.4)]">
+                                      <div className="w-8 h-8 bg-purple-500/50 rounded-full blur-[2px]"></div>
+                                    </div>
                                   </div>
                                 </div>
-                                <div className="mt-6 font-mono text-xl font-bold flex gap-4">
-                                  <span className={!val ? 'text-white' : 'text-slate-600'}>OFF</span>
-                                  <span className={val ? 'text-teal-400 drop-shadow-[0_0_5px_rgba(45,212,191,0.5)]' : 'text-slate-600'}>ON</span>
+                                <div className="flex flex-col gap-6 w-full max-w-[280px]">
+                                  <div className="bg-black/60 p-6 rounded-3xl border border-slate-700 shadow-xl backdrop-blur-md">
+                                    <p className="text-emerald-400 font-mono text-sm mb-4 text-center font-bold">FINE FOCUS</p>
+                                    <input type="range" min="100" max="1000" step="10" value={focus} onChange={e => handleInstrumentChange('focus', parseFloat(e.target.value), iTheme)} className="w-full h-4 bg-slate-800 rounded-full appearance-none cursor-pointer border border-emerald-900 accent-emerald-500 hover:accent-emerald-400 transition-all" />
+                                  </div>
+                                  <div className="bg-black/60 p-6 rounded-3xl border border-slate-700 shadow-xl backdrop-blur-md space-y-6">
+                                    <p className="text-emerald-400 font-mono text-sm text-center font-bold">STAGE PAN (X / Y)</p>
+                                    <input type="range" min="0" max="100" value={panX} onChange={e => handleInstrumentChange('panX', parseFloat(e.target.value), iTheme)} className="w-full h-2 rounded-full appearance-none bg-slate-800 accent-emerald-500" />
+                                    <input type="range" min="0" max="100" value={panY} onChange={e => handleInstrumentChange('panY', parseFloat(e.target.value), iTheme)} className="w-full h-2 rounded-full appearance-none bg-slate-800 accent-emerald-500" />
+                                  </div>
                                 </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* MODE: ORBITAL (Space) */}
+                    {iTheme.mode === 'orbital' && (
+                      <div className="relative z-10 flex flex-col h-full w-full flex-1">
+                        <div className="text-center mb-8"><h2 className="text-3xl text-amber-400 font-black font-heading tracking-wider uppercase drop-shadow-md">{iTheme.title}</h2></div>
+                        <div className="flex-1 flex flex-col md:flex-row gap-12 items-center justify-center">
+                          {(() => {
+                            const grav = (instrumentValues['grav'] as number) ?? 0;
+                            const vel = (instrumentValues['vel'] as number) ?? 0;
+                            const thruster = (instrumentValues['thruster'] as boolean) ?? false;
+                            const orbitSize = Math.max(50, vel * 2 + grav * 15);
+                            const isMatched = Math.abs(grav - 9.8) <= 0.1 && Math.abs(vel - 75) <= 1 && thruster;
+                            return (
+                              <>
+                                <div className="w-80 h-80 md:w-96 md:h-96 rounded-[3rem] border-4 border-slate-700 bg-slate-950 shadow-[inset_0_0_50px_rgba(0,0,0,0.9)] relative overflow-hidden flex items-center justify-center bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/10 to-transparent">
+                                  <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:20px_20px]"></div>
+                                  <div className="w-16 h-16 bg-gradient-to-br from-yellow-300 to-amber-600 rounded-full shadow-[0_0_40px_#f59e0b] z-20 border border-amber-300"></div>
+                                  <div className="absolute w-[297px] h-[297px] border-2 border-dashed border-white/20 rounded-full"></div>
+                                  <div className={`absolute border-2 rounded-full transition-all duration-300 ${thruster ? 'animate-[spin_4s_linear_infinite]' : ''}`} style={{ width: `${orbitSize}px`, height: `${orbitSize}px`, borderColor: isMatched ? '#10b981' : '#3b82f6' }}>
+                                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 bg-gradient-to-br from-blue-300 to-blue-600 rounded-full shadow-[0_0_15px_#60a5fa] border border-blue-200"></div>
+                                  </div>
+                                </div>
+                                <div className="flex flex-col gap-6 w-full max-w-[280px]">
+                                  <div className="bg-black/60 p-5 rounded-2xl border border-slate-700 backdrop-blur-md">
+                                    <p className="text-amber-400 font-mono text-xs mb-3 font-bold">GRAVITY WELL (m/s²)</p>
+                                    <input type="range" min="0" max="20" step="0.1" value={grav} onChange={e => handleInstrumentChange('grav', parseFloat(e.target.value), iTheme)} className="w-full h-3 rounded-full appearance-none bg-slate-800 accent-amber-500 hover:accent-amber-400 transition-all cursor-pointer" />
+                                    <p className="text-right text-slate-500 font-mono text-[10px] mt-1">{grav.toFixed(1)}</p>
+                                  </div>
+                                  <div className="bg-black/60 p-5 rounded-2xl border border-slate-700 backdrop-blur-md">
+                                    <p className="text-blue-400 font-mono text-xs mb-3 font-bold">ORBITAL VELOCITY (km/s)</p>
+                                    <input type="range" min="0" max="100" step="1" value={vel} onChange={e => handleInstrumentChange('vel', parseFloat(e.target.value), iTheme)} className="w-full h-3 rounded-full appearance-none bg-slate-800 accent-blue-500 hover:accent-blue-400 transition-all cursor-pointer" />
+                                    <p className="text-right text-slate-500 font-mono text-[10px] mt-1">{vel}</p>
+                                  </div>
+                                  <div className="bg-black/60 p-5 rounded-2xl border border-slate-700 backdrop-blur-md flex flex-col items-center">
+                                    <p className="text-red-400 font-mono text-xs mb-4 font-bold">MAIN THRUSTER</p>
+                                    <div onClick={() => handleInstrumentChange('thruster', !thruster, iTheme)} className={`w-20 h-10 rounded-full border-2 cursor-pointer transition-colors relative ${thruster ? 'bg-red-500 border-red-300 shadow-[0_0_20px_rgba(239,68,68,0.5)]' : 'bg-slate-800 border-slate-600'}`}>
+                                      <div className={`absolute top-1 w-7 h-7 bg-white rounded-full transition-transform shadow-md ${thruster ? 'translate-x-11' : 'translate-x-1'}`}></div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* MODE: PHYSICS */}
+                    {iTheme.mode === 'physics' && (
+                      <div className="relative z-10 flex flex-col h-full w-full flex-1">
+                        <div className="text-center mb-8"><h2 className="text-3xl text-indigo-400 font-black font-heading tracking-wider uppercase drop-shadow-md">{iTheme.title}</h2></div>
+                        <div className="flex-1 flex flex-col md:flex-row gap-12 items-center justify-center">
+                          {(() => {
+                            const mass = (instrumentValues['mass'] as number) ?? 10;
+                            const force = (instrumentValues['force'] as number) ?? 0;
+                            const friction = (instrumentValues['friction'] as number) ?? 0;
+                            const netForce = Math.max(0, force - friction);
+                            const acceleration = mass > 0 ? (netForce / mass) * 10 : 0;
+                            const isMatched = Math.abs(mass - 50) <= 2 && Math.abs(force - 80) <= 2 && Math.abs(friction - 10) <= 2;
+                            return (
+                              <>
+                                <div className="w-80 h-80 md:w-96 md:h-96 rounded-2xl border-4 border-slate-700 bg-slate-900 shadow-[inset_0_0_50px_rgba(0,0,0,0.9)] relative overflow-hidden flex items-center justify-center bg-[linear-gradient(to_right,#1e1e1e_1px,transparent_1px),linear-gradient(to_bottom,#1e1e1e_1px,transparent_1px)] bg-[size:40px_40px]">
+                                  {/* Floor */}
+                                  <div className="absolute bottom-0 w-full h-1/3 bg-slate-800 border-t-2 border-slate-700 flex items-center justify-center">
+                                     {friction > 0 && <div className="absolute top-0 left-0 w-full h-2 bg-amber-900/40"></div>}
+                                  </div>
+                                  
+                                  {/* The Mass Block */}
+                                  <div className="absolute transition-all duration-300 flex items-center justify-center" style={{ 
+                                      width: `${40 + mass}px`, 
+                                      height: `${40 + mass}px`, 
+                                      bottom: '33.333%',
+                                      left: `${20 + (acceleration * 2)}%`,
+                                      backgroundColor: isMatched ? '#10b981' : '#6366f1',
+                                      boxShadow: isMatched ? '0 0 30px rgba(16,185,129,0.5)' : 'none'
+                                  }}>
+                                     <span className="text-white font-bold text-xs">{mass}kg</span>
+                                     
+                                     {/* Force Arrow */}
+                                     {force > 0 && (
+                                        <div className="absolute left-full top-1/2 -translate-y-1/2 flex items-center ml-2 pointer-events-none">
+                                           <div className="bg-red-500 h-2" style={{ width: `${force}px` }}></div>
+                                           <div className="w-0 h-0 border-t-4 border-t-transparent border-b-4 border-b-transparent border-l-8 border-l-red-500"></div>
+                                        </div>
+                                     )}
+                                     
+                                     {/* Friction Arrow */}
+                                     {friction > 0 && (
+                                        <div className="absolute right-full bottom-0 flex items-center mr-2 pointer-events-none">
+                                           <div className="w-0 h-0 border-t-2 border-t-transparent border-b-2 border-b-transparent border-r-4 border-r-amber-500"></div>
+                                           <div className="bg-amber-500 h-1" style={{ width: `${friction}px` }}></div>
+                                        </div>
+                                     )}
+                                  </div>
+                                </div>
+                                <div className="flex flex-col gap-4 w-full max-w-[280px]">
+                                  <div className="bg-black/60 p-4 rounded-xl border border-slate-700 backdrop-blur-md">
+                                    <p className="text-indigo-400 font-mono text-[10px] mb-2 font-bold">MASS (kg)</p>
+                                    <input type="range" min="1" max="100" step="1" value={mass} onChange={e => handleInstrumentChange('mass', parseFloat(e.target.value), iTheme)} className="w-full h-2 rounded-full appearance-none bg-slate-800 accent-indigo-500" />
+                                  </div>
+                                  <div className="bg-black/60 p-4 rounded-xl border border-slate-700 backdrop-blur-md">
+                                    <p className="text-red-400 font-mono text-[10px] mb-2 font-bold">APPLIED FORCE (N)</p>
+                                    <input type="range" min="0" max="100" step="1" value={force} onChange={e => handleInstrumentChange('force', parseFloat(e.target.value), iTheme)} className="w-full h-2 rounded-full appearance-none bg-slate-800 accent-red-500" />
+                                  </div>
+                                  <div className="bg-black/60 p-4 rounded-xl border border-slate-700 backdrop-blur-md">
+                                    <p className="text-amber-400 font-mono text-[10px] mb-2 font-bold">FRICTION (N)</p>
+                                    <input type="range" min="0" max="50" step="1" value={friction} onChange={e => handleInstrumentChange('friction', parseFloat(e.target.value), iTheme)} className="w-full h-2 rounded-full appearance-none bg-slate-800 accent-amber-500" />
+                                  </div>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Excellence Blast Overlay */}
                     {tactileSuccess && (
@@ -806,11 +1250,17 @@ export default function LessonViewerPage() {
               <div className={`p-8 border border-border/60 rounded-3xl bg-black overflow-hidden relative min-h-[500px] flex flex-col items-center justify-center shadow-2xl transition-all duration-500 ${isWebcamActive ? '!fixed !inset-0 !z-[9999] !w-[100vw] !h-[100vh] !rounded-none !border-none !m-0 !p-0 !max-w-none' : ''}`}>
                 
                 {/* Major Screen Background (Virtual Environment) */}
-                <div className={`w-full h-full absolute inset-0 transition-opacity duration-500 ${isWebcamActive ? 'opacity-100 z-0' : 'opacity-0 pointer-events-none -z-10'} ${(() => getTactileTheme(lesson?.title || "").bgClass)()}`}>
+                <div className={`w-full h-full absolute inset-0 transition-opacity duration-500 ${isWebcamActive ? 'opacity-100 z-0' : 'opacity-0 pointer-events-none -z-10'} ${getTactileTheme(lesson).bgClass}`}>
                   
                   {/* The PIP Camera Feed (Google Meet Style) */}
                   <div className="absolute bottom-8 left-8 w-64 h-48 bg-black rounded-3xl border-2 border-white/20 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] z-50">
                     <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
+                    
+                    {/* LIVE TRACKING DEBUGGER: Shows exactly what the AI is locking onto in real-time */}
+                    <div className="absolute pointer-events-none w-6 h-6 rounded-full border-[3px] border-red-500 flex items-center justify-center transition-all duration-75 z-50 shadow-[0_0_15px_red]" style={{ left: `${arCursor.x}%`, top: `${arCursor.y}%`, transform: 'translate(-50%, -50%)' }}>
+                       <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                    </div>
+                    
                     <div className="absolute top-3 left-3 bg-black/60 px-2 py-1 rounded-md text-[10px] text-teal-400 font-mono flex items-center gap-2 border border-white/10 backdrop-blur-md">
                       <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                       SENSOR FEED
@@ -820,7 +1270,7 @@ export default function LessonViewerPage() {
                   
                   {/* AR OVERLAY AND GAME LOGIC */}
                   {(() => {
-                    const theme = getTactileTheme(lesson?.title || "");
+                    const theme = getTactileTheme(lesson);
                     const spawns = [ { id: 0, x: 20, y: 80 }, { id: 1, x: 45, y: 80 }, { id: 2, x: 70, y: 80 } ];
                     const targets = [ { id: 0, x: 20, y: 20 }, { id: 1, x: 45, y: 20 }, { id: 2, x: 70, y: 20 } ];
 
@@ -932,8 +1382,8 @@ export default function LessonViewerPage() {
                       </div>
                       <div className="space-y-4">
                         {(() => {
-                           const theme = getTactileTheme(lesson?.title || "");
-                           return theme.instructions.map((step, idx) => {
+                           const theme = getTactileTheme(lesson);
+                           return (theme.instructions || []).map((step: string, idx: number) => {
                              const isCompleted = arPlacedItems[idx as keyof typeof arPlacedItems];
                              return (
                                <div key={idx} className={`flex gap-3 text-sm transition-opacity duration-300 ${isCompleted ? 'opacity-40 line-through text-teal-200' : 'text-slate-200'}`}>

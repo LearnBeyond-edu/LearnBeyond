@@ -19,6 +19,9 @@ const outfit = Outfit({
 export const metadata: Metadata = {
   title: "LearnBeyond | AI-Powered Education SaaS",
   description: "Premium education platform powered by Laura AI",
+  icons: {
+    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%230f172a"/><text x="50" y="66" font-family="sans-serif" font-weight="900" font-size="46" fill="%232dd4bf" text-anchor="middle">LB</text></svg>',
+  },
 };
 
 export default function RootLayout({

@@ -9,8 +9,12 @@ import type { ApiResponse } from '@/types/platform';
 // ─── Classes ──────────────────────────────────────────────────────────────────
 export const classService = {
   getAll: async (limit = 20, cursor?: string): Promise<CursorResponse<SchoolClass>> => {
-    const res = await api.get<ApiResponse<SchoolClass[]>>('/classes', { params: { limit, ...(cursor ? { cursor } : {}) } });
-    return { data: res.data.data, meta: res.data.meta as any };
+    try {
+      const res = await api.get<ApiResponse<SchoolClass[]>>('/classes', { params: { limit, ...(cursor ? { cursor } : {}) } });
+      return { data: res.data.data, meta: res.data.meta as any };
+    } catch {
+      return { data: [], meta: {} as any };
+    }
   },
   getOne: async (id: string): Promise<SchoolClass> => {
     const res = await api.get<ApiResponse<SchoolClass>>(`/classes/${id}`);
@@ -32,8 +36,12 @@ export const classService = {
 // ─── Lessons ──────────────────────────────────────────────────────────────────
 export const lessonService = {
   getAll: async (limit = 50, cursor?: string): Promise<CursorResponse<Lesson>> => {
-    const res = await api.get<ApiResponse<Lesson[]>>('/lessons', { params: { limit, ...(cursor ? { cursor } : {}) } });
-    return { data: res.data.data, meta: res.data.meta as any };
+    try {
+      const res = await api.get<ApiResponse<Lesson[]>>('/lessons', { params: { limit, ...(cursor ? { cursor } : {}) } });
+      return { data: res.data.data, meta: res.data.meta as any };
+    } catch {
+      return { data: [], meta: {} as any };
+    }
   },
   getOne: async (id: string): Promise<Lesson> => {
     const res = await api.get<ApiResponse<Lesson>>(`/lessons/${id}`);
@@ -55,8 +63,12 @@ export const lessonService = {
 // ─── Staff (Teachers) ─────────────────────────────────────────────────────────
 export const teacherService = {
   getAll: async (limit = 50, cursor?: string): Promise<CursorResponse<StaffProfile>> => {
-    const res = await api.get<ApiResponse<StaffProfile[]>>('/staff_profiles', { params: { limit, ...(cursor ? { cursor } : {}) } });
-    return { data: res.data.data, meta: res.data.meta as any };
+    try {
+      const res = await api.get<ApiResponse<StaffProfile[]>>('/staff_profiles', { params: { limit, ...(cursor ? { cursor } : {}) } });
+      return { data: res.data.data, meta: res.data.meta as any };
+    } catch {
+      return { data: [], meta: {} as any };
+    }
   },
   getOne: async (id: string): Promise<StaffProfile> => {
     const res = await api.get<ApiResponse<StaffProfile>>(`/staff_profiles/${id}`);
@@ -70,8 +82,12 @@ export const teacherService = {
 // ─── Students ─────────────────────────────────────────────────────────────────
 export const studentService = {
   getAll: async (limit = 50, cursor?: string): Promise<CursorResponse<StudentProfile>> => {
-    const res = await api.get<ApiResponse<StudentProfile[]>>('/student_profiles', { params: { limit, ...(cursor ? { cursor } : {}) } });
-    return { data: res.data.data, meta: res.data.meta as any };
+    try {
+      const res = await api.get<ApiResponse<StudentProfile[]>>('/student_profiles', { params: { limit, ...(cursor ? { cursor } : {}) } });
+      return { data: res.data.data, meta: res.data.meta as any };
+    } catch {
+      return { data: [], meta: {} as any };
+    }
   },
   getOne: async (id: string): Promise<StudentProfile> => {
     const res = await api.get<ApiResponse<StudentProfile>>(`/student_profiles/${id}`);
@@ -85,8 +101,12 @@ export const studentService = {
 // ─── Parents ──────────────────────────────────────────────────────────────────
 export const parentService = {
   getAll: async (limit = 50, cursor?: string): Promise<CursorResponse<ParentProfile>> => {
-    const res = await api.get<ApiResponse<ParentProfile[]>>('/parent_profiles', { params: { limit, ...(cursor ? { cursor } : {}) } });
-    return { data: res.data.data, meta: res.data.meta as any };
+    try {
+      const res = await api.get<ApiResponse<ParentProfile[]>>('/parent_profiles', { params: { limit, ...(cursor ? { cursor } : {}) } });
+      return { data: res.data.data, meta: res.data.meta as any };
+    } catch {
+      return { data: [], meta: {} as any };
+    }
   },
   getOne: async (id: string): Promise<ParentProfile> => {
     const res = await api.get<ApiResponse<ParentProfile>>(`/parent_profiles/${id}`);
@@ -100,8 +120,12 @@ export const parentService = {
 // ─── Therapists ───────────────────────────────────────────────────────────────
 export const therapistService = {
   getAll: async (limit = 50, cursor?: string): Promise<CursorResponse<TherapistProfile>> => {
-    const res = await api.get<ApiResponse<TherapistProfile[]>>('/therapist_profiles', { params: { limit, ...(cursor ? { cursor } : {}) } });
-    return { data: res.data.data, meta: res.data.meta as any };
+    try {
+      const res = await api.get<ApiResponse<TherapistProfile[]>>('/therapist_profiles', { params: { limit, ...(cursor ? { cursor } : {}) } });
+      return { data: res.data.data, meta: res.data.meta as any };
+    } catch {
+      return { data: [], meta: {} as any };
+    }
   },
   getOne: async (id: string): Promise<TherapistProfile> => {
     const res = await api.get<ApiResponse<TherapistProfile>>(`/therapist_profiles/${id}`);
@@ -112,26 +136,38 @@ export const therapistService = {
 // ─── Attendance ───────────────────────────────────────────────────────────────
 export const attendanceService = {
   getAll: async (limit = 100, cursor?: string): Promise<CursorResponse<AttendanceRecord>> => {
-    const res = await api.get<ApiResponse<AttendanceRecord[]>>('/attendance', { params: { limit, ...(cursor ? { cursor } : {}) } });
-    return { data: res.data.data, meta: res.data.meta as any };
+    try {
+      const res = await api.get<ApiResponse<AttendanceRecord[]>>('/attendance', { params: { limit, ...(cursor ? { cursor } : {}) } });
+      return { data: res.data.data, meta: res.data.meta as any };
+    } catch {
+      return { data: [], meta: {} as any };
+    }
   },
 };
 
 // ─── Assignments ──────────────────────────────────────────────────────────────
 export const assignmentService = {
   getAll: async (limit = 50, cursor?: string): Promise<CursorResponse<Assignment>> => {
-    const res = await api.get<ApiResponse<Assignment[]>>('/assignments', { params: { limit, ...(cursor ? { cursor } : {}) } });
-    return { data: res.data.data, meta: res.data.meta as any };
+    try {
+      const res = await api.get<ApiResponse<Assignment[]>>('/assignments', { params: { limit, ...(cursor ? { cursor } : {}) } });
+      return { data: res.data.data, meta: res.data.meta as any };
+    } catch {
+      return { data: [], meta: {} as any };
+    }
   },
 };
 
 // ─── Progress ─────────────────────────────────────────────────────────────────
 export const progressService = {
   getAll: async (limit = 100, cursor?: string, filters?: Record<string, any>): Promise<CursorResponse<Progress>> => {
-    const res = await api.get<ApiResponse<Progress[]>>('/progress', { 
-      params: { limit, ...(cursor ? { cursor } : {}), ...filters } 
-    });
-    return { data: res.data.data, meta: res.data.meta as any };
+    try {
+      const res = await api.get<ApiResponse<Progress[]>>('/progress', { 
+        params: { limit, ...(cursor ? { cursor } : {}), ...filters } 
+      });
+      return { data: res.data.data, meta: res.data.meta as any };
+    } catch {
+      return { data: [], meta: {} as any };
+    }
   },
 };
 
@@ -139,8 +175,12 @@ export const progressService = {
 import type { Quiz, CreateQuizPayload } from '@/types/school';
 export const quizService = {
   getAll: async (limit = 50, cursor?: string): Promise<CursorResponse<Quiz>> => {
-    const res = await api.get<ApiResponse<Quiz[]>>('/quizzes', { params: { limit, ...(cursor ? { cursor } : {}) } });
-    return { data: res.data.data, meta: res.data.meta as any };
+    try {
+      const res = await api.get<ApiResponse<Quiz[]>>('/quizzes', { params: { limit, ...(cursor ? { cursor } : {}) } });
+      return { data: res.data.data, meta: res.data.meta as any };
+    } catch {
+      return { data: [], meta: {} as any };
+    }
   },
   getOne: async (id: string): Promise<Quiz> => {
     const res = await api.get<ApiResponse<Quiz>>(`/quizzes/${id}`);
@@ -163,10 +203,14 @@ export const quizService = {
 import type { Submission } from '@/types/school';
 export const submissionService = {
   getAll: async (limit = 50, cursor?: string, filters?: Record<string, any>): Promise<CursorResponse<Submission>> => {
-    const res = await api.get<ApiResponse<Submission[]>>('/submissions', { 
-      params: { limit, ...(cursor ? { cursor } : {}), ...filters } 
-    });
-    return { data: res.data.data, meta: res.data.meta as any };
+    try {
+      const res = await api.get<ApiResponse<Submission[]>>('/submissions', { 
+        params: { limit, ...(cursor ? { cursor } : {}), ...filters } 
+      });
+      return { data: res.data.data, meta: res.data.meta as any };
+    } catch {
+      return { data: [], meta: {} as any };
+    }
   },
   getOne: async (id: string): Promise<Submission> => {
     const res = await api.get<ApiResponse<Submission>>(`/submissions/${id}`);

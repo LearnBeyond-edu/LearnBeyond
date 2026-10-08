@@ -54,8 +54,8 @@ export default function LessonsPage() {
   // Filters logic
   const filteredLessons = useMemo(() => {
     return lessons.filter(l => {
-      const matchSearch = l.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (l.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
+      const matchSearch = (l.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          ((l.description || "").toLowerCase().includes(searchQuery.toLowerCase()));
       const matchClass = selectedClassId && selectedClassId !== "all" ? l.class_id === selectedClassId : true;
       return matchSearch && matchClass;
     });

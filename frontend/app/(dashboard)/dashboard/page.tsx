@@ -85,8 +85,9 @@ export default function StudentDashboard() {
 
   // Helper to extract flat list from infinite query pagination structure
   const enrolledClasses = useMemo(() => {
-    return (classesData?.pages?.flatMap(p => p.data) || []).filter(c => c.institution_id === user?.institutionId);
-  }, [classesData, user]);
+    // The backend already isolates classes by institution_id for the user.
+    return (classesData?.pages?.flatMap(p => p.data) || []);
+  }, [classesData]);
 
   const upcomingLessons = useMemo(() => {
     const classIds = enrolledClasses.map(c => c.id);
