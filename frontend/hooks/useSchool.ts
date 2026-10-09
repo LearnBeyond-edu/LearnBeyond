@@ -206,6 +206,13 @@ export const useAssignments = () =>
     staleTime: 60_000,
   });
 
+export const useAssignment = (id: string) =>
+  useQuery({
+    queryKey: ['assignments', id],
+    queryFn: () => assignmentService.getOne(id),
+    enabled: !!id,
+  });
+
 // ─── Progress ─────────────────────────────────────────────────────────────────
 export const useProgress = (filters?: Record<string, any>) =>
   useInfiniteQuery({

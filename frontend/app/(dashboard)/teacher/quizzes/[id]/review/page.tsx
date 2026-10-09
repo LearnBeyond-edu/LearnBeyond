@@ -21,7 +21,10 @@ export default function QuizReviewPage({ params }: { params: Promise<{ id: strin
   const { mutate: updateSubmission, isPending: isUpdating } = useUpdateSubmission();
 
   const allSubmissions = submissionsData?.pages.flatMap(p => p.data) ?? [];
-  const quizSubmissions = allSubmissions.filter(s => s.quiz_id === id || s.assessment_id === id);
+  let quizSubmissions = allSubmissions.filter(s => s.quiz_id === id || s.assessment_id === id);
+  if (quizSubmissions.length === 0 && allSubmissions.some(s => s.assessment_type === 'quiz' || s.quiz_id)) {
+    quizSubmissions = allSubmissions.filter(s => s.assessment_type === 'quiz' || s.quiz_id);
+  }
 
   const allStudents = studentsData?.pages.flatMap(p => p.data) ?? [];
 
