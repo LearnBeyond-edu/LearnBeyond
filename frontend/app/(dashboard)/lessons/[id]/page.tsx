@@ -369,26 +369,42 @@ export default function LessonViewerPage() {
     }
   }, [arCursor, arPickedItem, arPlacedItems, isWebcamActive, arExplosion]);
 
-  const toggleWebcam = async () => {
+  const [hasCameraStream, setHasCameraStream] = useState(false);
+
+  const startSimulation = async (withCamera = true) => {
     if (isWebcamActive) {
-      const stream = videoRef.current?.srcObject as MediaStream;
-      stream?.getTracks().forEach(track => track.stop());
+      if (videoRef.current?.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream?.getTracks().forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+      }
       setIsWebcamActive(false);
+      setHasCameraStream(false);
       setArPickedItem(null);
       setArPlacedItems({ 0: false, 1: false, 2: false });
       setArExplosion(false);
     } else {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+      setIsWebcamActive(true);
+      if (withCamera && typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play().catch(() => {});
+          }
+          setHasCameraStream(true);
+        } catch {
+          setHasCameraStream(false);
+          toast.info("Switched to interactive Virtual Hand touch/mouse mode.");
         }
-        setIsWebcamActive(true);
-      } catch (err) {
-        toast.error("Webcam access denied.");
+      } else {
+        setHasCameraStream(false);
+        toast.info("Virtual Hand simulation engaged. Move your cursor to assemble!");
       }
     }
   };
+
+  const toggleWebcam = () => startSimulation(true);
 
   // Tactile State
   const [circuit, setCircuit] = useState({ item0: false, item1: false, item2: false });
@@ -1247,25 +1263,36 @@ export default function LessonViewerPage() {
 
             {/* TAB: KINESTHETIC ARENA */}
             <TabsContent value="kinesthetic" className="mt-0 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className={`p-8 border border-border/60 rounded-3xl bg-black overflow-hidden relative min-h-[500px] flex flex-col items-center justify-center shadow-2xl transition-all duration-500 ${isWebcamActive ? '!fixed !inset-0 !z-[9999] !w-[100vw] !h-[100vh] !rounded-none !border-none !m-0 !p-0 !max-w-none' : ''}`}>
+              <div 
+                onMouseMove={(e) => {
+                  if (!isWebcamActive) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = ((e.clientX - rect.left) / rect.width) * 100;
+                  const y = ((e.clientY - rect.top) / rect.height) * 100;
+                  setArCursor({ x: Math.max(5, Math.min(95, x)), y: Math.max(5, Math.min(95, y)) });
+                }}
+                className={`p-8 border border-border/60 rounded-3xl bg-black overflow-hidden relative min-h-[500px] flex flex-col items-center justify-center shadow-2xl transition-all duration-500 ${isWebcamActive ? '!fixed !inset-0 !z-[9999] !w-[100vw] !h-[100vh] !rounded-none !border-none !m-0 !p-0 !max-w-none cursor-crosshair' : ''}`}
+              >
                 
                 {/* Major Screen Background (Virtual Environment) */}
                 <div className={`w-full h-full absolute inset-0 transition-opacity duration-500 ${isWebcamActive ? 'opacity-100 z-0' : 'opacity-0 pointer-events-none -z-10'} ${getTactileTheme(lesson).bgClass}`}>
                   
-                  {/* The PIP Camera Feed (Google Meet Style) */}
-                  <div className="absolute bottom-8 left-8 w-64 h-48 bg-black rounded-3xl border-2 border-white/20 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] z-50">
-                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-                    
-                    {/* LIVE TRACKING DEBUGGER: Shows exactly what the AI is locking onto in real-time */}
-                    <div className="absolute pointer-events-none w-6 h-6 rounded-full border-[3px] border-red-500 flex items-center justify-center transition-all duration-75 z-50 shadow-[0_0_15px_red]" style={{ left: `${arCursor.x}%`, top: `${arCursor.y}%`, transform: 'translate(-50%, -50%)' }}>
-                       <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                  {/* The PIP Camera Feed (Rendered only when active camera stream exists) */}
+                  {hasCameraStream && (
+                    <div className="absolute bottom-8 left-8 w-64 h-48 bg-black rounded-3xl border-2 border-white/20 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] z-50">
+                      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
+                      
+                      {/* LIVE TRACKING DEBUGGER */}
+                      <div className="absolute pointer-events-none w-6 h-6 rounded-full border-[3px] border-red-500 flex items-center justify-center transition-all duration-75 z-50 shadow-[0_0_15px_red]" style={{ left: `${arCursor.x}%`, top: `${arCursor.y}%`, transform: 'translate(-50%, -50%)' }}>
+                         <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                      </div>
+                      
+                      <div className="absolute top-3 left-3 bg-black/60 px-2 py-1 rounded-md text-[10px] text-teal-400 font-mono flex items-center gap-2 border border-white/10 backdrop-blur-md">
+                        <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                        CAMERA SENSOR FEED
+                      </div>
                     </div>
-                    
-                    <div className="absolute top-3 left-3 bg-black/60 px-2 py-1 rounded-md text-[10px] text-teal-400 font-mono flex items-center gap-2 border border-white/10 backdrop-blur-md">
-                      <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                      SENSOR FEED
-                    </div>
-                  </div>
+                  )}
                   <canvas ref={hiddenCanvasRef} width={160} height={120} className="hidden" />
                   
                   {/* AR OVERLAY AND GAME LOGIC */}
@@ -1280,7 +1307,7 @@ export default function LessonViewerPage() {
                         {/* Status Bar */}
                         <div className="absolute top-4 left-4 bg-black/60 px-4 py-2 rounded-xl border border-teal-500/30 text-teal-400 font-mono text-xs font-bold tracking-widest flex items-center gap-3 backdrop-blur-md">
                           <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                          AR TRACKING ENGAGED
+                          AR KINESTHETIC ARENA ACTIVE
                         </div>
 
                         {/* Success Explosion */}
@@ -1292,10 +1319,10 @@ export default function LessonViewerPage() {
                             <p className="mt-8 text-xl font-bold text-white tracking-widest uppercase bg-teal-900/50 px-6 py-2 rounded-full border border-teal-500 mb-12">{theme.success}</p>
                             
                             <Button 
-                              onClick={toggleWebcam} 
+                              onClick={() => startSimulation(false)} 
                               className="relative z-50 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg px-12 py-6 rounded-full shadow-[0_0_30px_rgba(16,185,129,0.5)] border border-emerald-300 pointer-events-auto"
                             >
-                              COMPLETE & EXIT AR
+                              COMPLETE & EXIT ARENA
                             </Button>
                             
                             <div className="absolute w-full h-full pointer-events-none bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-teal-400/30 via-transparent to-transparent opacity-50 animate-[ping_2s_infinite] -z-10"></div>
@@ -1369,8 +1396,8 @@ export default function LessonViewerPage() {
                   })()}
                   
                   <div className="absolute top-6 right-6 bg-black/60 px-3 py-1.5 rounded-md border border-teal-500/30 text-teal-400 font-mono text-xs font-bold tracking-widest pointer-events-auto">
-                      <Button onClick={toggleWebcam} variant="ghost" className="h-6 hover:bg-red-500/20 hover:text-red-400 text-xs text-white p-2">
-                        Exit AR
+                      <Button onClick={() => startSimulation(false)} variant="ghost" className="h-6 hover:bg-red-500/20 hover:text-red-400 text-xs text-white p-2">
+                        Exit Arena
                       </Button>
                     </div>
 
@@ -1386,12 +1413,12 @@ export default function LessonViewerPage() {
                            return (theme.instructions || []).map((step: string, idx: number) => {
                              const isCompleted = arPlacedItems[idx as keyof typeof arPlacedItems];
                              return (
-                               <div key={idx} className={`flex gap-3 text-sm transition-opacity duration-300 ${isCompleted ? 'opacity-40 line-through text-teal-200' : 'text-slate-200'}`}>
-                                 <div className={`mt-0.5 w-4 h-4 rounded-full flex-shrink-0 border flex items-center justify-center ${isCompleted ? 'bg-teal-500 border-teal-500' : 'border-slate-500'}`}>
-                                   {isCompleted && <CheckCircle className="w-3 h-3 text-white" />}
-                                 </div>
-                                 <p className="leading-snug">{step}</p>
-                               </div>
+                                <div key={idx} className={`flex gap-3 text-sm transition-opacity duration-300 ${isCompleted ? 'opacity-40 line-through text-teal-200' : 'text-slate-200'}`}>
+                                  <div className={`mt-0.5 w-4 h-4 rounded-full flex-shrink-0 border flex items-center justify-center ${isCompleted ? 'bg-teal-500 border-teal-500' : 'border-slate-500'}`}>
+                                    {isCompleted && <CheckCircle className="w-3 h-3 text-white" />}
+                                  </div>
+                                  <p className="leading-snug">{step}</p>
+                                </div>
                              );
                            });
                         })()}
@@ -1405,12 +1432,17 @@ export default function LessonViewerPage() {
                       <Scan className="w-10 h-10 text-teal-400 animate-[spin_10s_linear_infinite]" />
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold font-heading text-white mb-2">Kinesthetic AR Mode</h3>
-                      <p className="text-sm text-slate-300">Your camera will become an interactive workspace. Move your hand to pick up components and place them into the correct targets.</p>
+                      <h3 className="text-2xl font-bold font-heading text-white mb-2">Kinesthetic Multi-Sensory Arena</h3>
+                      <p className="text-sm text-slate-300">Interact with planetary & physical components using your webcam gestures or your interactive mouse/touch virtual hand.</p>
                     </div>
-                    <Button onClick={toggleWebcam} className="bg-gradient-to-r from-teal-600 to-emerald-500 hover:from-teal-500 hover:to-emerald-400 text-white rounded-full h-12 px-8 w-full font-bold shadow-lg shadow-teal-900/50 text-base">
-                      Start AR Simulation
-                    </Button>
+                    <div className="space-y-3">
+                      <Button onClick={() => startSimulation(true)} className="bg-gradient-to-r from-teal-600 to-emerald-500 hover:from-teal-500 hover:to-emerald-400 text-white rounded-full h-12 px-8 w-full font-bold shadow-lg shadow-teal-900/50 text-base">
+                        Start Webcam AR Simulation
+                      </Button>
+                      <Button onClick={() => startSimulation(false)} variant="outline" className="border-white/20 hover:bg-white/10 text-white rounded-full h-10 px-6 w-full text-xs font-semibold">
+                        Launch Virtual Hand (Mouse / Touch Mode)
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>

@@ -37,13 +37,20 @@ export default function LoginPage() {
 
   React.useEffect(() => {
     if (isAuthenticated && user) {
-      const roleStr = String(user.role).toLowerCase();
-      if (roleStr.includes('platform admin') || roleStr === 'super_admin') router.push("/admin");
-      else if (roleStr.includes('institution admin') || roleStr.includes('school admin') || roleStr === 'admin' || roleStr === 'school') router.push("/school");
-      else if (roleStr.includes('teacher')) router.push("/teacher");
-      else if (roleStr.includes('parent')) router.push("/parent");
-      else if (roleStr.includes('therapist')) router.push("/therapist");
-      else router.push("/dashboard");
+      const roleStr = String((user as any).role || (user as any).role_name || "").toLowerCase();
+      if (roleStr.includes('platform admin') || roleStr === 'super_admin' || roleStr === 'admin') {
+        router.push("/admin");
+      } else if (roleStr.includes('institution admin') || roleStr.includes('school admin') || roleStr === 'school') {
+        router.push("/school");
+      } else if (roleStr.includes('teacher') || roleStr.includes('staff')) {
+        router.push("/teacher");
+      } else if (roleStr.includes('parent')) {
+        router.push("/parent");
+      } else if (roleStr.includes('therapist')) {
+        router.push("/therapist");
+      } else {
+        router.push("/dashboard");
+      }
     }
   }, [isAuthenticated, user, router]);
 
@@ -58,12 +65,10 @@ export default function LoginPage() {
   const { mutate: login, isPending } = useMutation({
     mutationFn: authService.login,
     onSuccess: (data) => {
-      // Assuming data structure based on typical node backends: { status: 'success', data: { user, accessToken } }
       const user = data.data.user;
       const accessToken = data.data.accessToken;
       const refreshToken = data.data.refreshToken;
       
-      // Ensure backend's snake_case properties are mapped to frontend's expected properties
       if (user.role_name && !user.role) user.role = user.role_name;
       if (user.first_name && !user.firstName) user.firstName = user.first_name;
       if (user.last_name !== undefined && user.lastName === undefined) user.lastName = user.last_name;
@@ -72,13 +77,13 @@ export default function LoginPage() {
       setAuth(user, accessToken, refreshToken);
       toast.success("Welcome back!");
       
-      // Role-based routing
-      const roleStr = String(user.role).toLowerCase();
-      if (roleStr.includes('platform admin') || roleStr === 'super_admin') {
+      // Strict role-based routing
+      const roleStr = String(user.role || user.role_name || "").toLowerCase();
+      if (roleStr.includes('platform admin') || roleStr === 'super_admin' || roleStr === 'admin') {
         router.push("/admin");
-      } else if (roleStr.includes('institution admin') || roleStr.includes('school admin') || roleStr === 'admin' || roleStr === 'school') {
+      } else if (roleStr.includes('institution admin') || roleStr.includes('school admin') || roleStr === 'school') {
         router.push("/school");
-      } else if (roleStr.includes('teacher')) {
+      } else if (roleStr.includes('teacher') || roleStr.includes('staff')) {
         router.push("/teacher");
       } else if (roleStr.includes('parent')) {
         router.push("/parent");
@@ -110,7 +115,15 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form 
+              method="POST" 
+              action="#" 
+              onSubmit={(e) => {
+                e.preventDefault();
+                form.handleSubmit(onSubmit)(e);
+              }} 
+              className="space-y-4"
+            >
               <FormField
                 control={form.control}
                 name="email"

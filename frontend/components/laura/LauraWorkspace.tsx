@@ -455,10 +455,10 @@ export default function LauraAIWorkspace() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto h-[80vh] flex flex-col md:flex-row gap-6">
+    <div className="w-full max-w-full h-[80vh] flex flex-col lg:flex-row gap-6 overflow-hidden">
       
       {/* LEFT SIDEBAR */}
-      <div className="w-full md:w-64 flex flex-col gap-4 border-r border-border/40 pr-6 flex-shrink-0">
+      <div className="w-full lg:w-64 flex flex-col gap-4 border-r border-border/40 pr-6 flex-shrink-0">
         <Button onClick={() => createSession(role, "General")} className="bg-teal-600 hover:bg-teal-700 text-white gap-2 w-full">
           <Plus className="h-4 w-4" /> New Chat
         </Button>
@@ -759,7 +759,7 @@ export default function LauraAIWorkspace() {
       </div>
 
       {/* RIGHT SIDEBAR */}
-      <div className="w-full md:w-72 flex flex-col gap-4 border-l border-border/40 pl-6 flex-shrink-0 overflow-y-auto pr-1">
+      <div className="hidden xl:flex w-72 flex-col gap-4 border-l border-border/40 pl-6 flex-shrink-0 overflow-y-auto pr-1">
         {/* Suggested Prompts */}
         <Card className="border-border/60 bg-gradient-to-b from-teal-500/5 to-transparent">
           <CardHeader className="pb-3 border-b border-border/40"><CardTitle className="text-xs font-bold">Suggested for {role}</CardTitle></CardHeader>

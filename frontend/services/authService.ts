@@ -13,29 +13,33 @@ export const authService = {
       // Fast fallback for instantaneous response (under 0.5s) on Netlify
       const email = String(credentials.email || "").toLowerCase();
       let role = "Student";
-      let firstName = "Alex";
-      let lastName = "Johnson";
+      let firstName = "Johnny";
+      let lastName = "Appleseed";
       
-      if (email.includes("admin") || email.includes("platform")) {
+      if (email.includes("platform") || email.startsWith("admin") || email === "admin@learnbeyond.edu") {
         role = "Platform Admin";
         firstName = "Platform";
         lastName = "Admin";
-      } else if (email.includes("school") || email.includes("institution")) {
+      } else if (email.includes("school") || email.includes("institution") || email.startsWith("school")) {
         role = "Institution Admin";
         firstName = "Institution";
         lastName = "Admin";
-      } else if (email.includes("teacher")) {
+      } else if (email.includes("teacher") || email.includes("staff") || email.startsWith("teacher")) {
         role = "Teacher";
         firstName = "Jane";
         lastName = "Smith";
-      } else if (email.includes("parent")) {
+      } else if (email.includes("parent") || email.startsWith("parent")) {
         role = "Parent";
         firstName = "Martha";
         lastName = "Appleseed";
-      } else if (email.includes("therapist")) {
+      } else if (email.includes("therapist") || email.startsWith("therapist") || email.includes("thanya")) {
         role = "Therapist";
         firstName = "Dr. John";
         lastName = "Watson";
+      } else if (email.includes("student") || email.startsWith("student")) {
+        role = "Student";
+        firstName = "Johnny";
+        lastName = "Appleseed";
       }
 
       return {
