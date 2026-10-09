@@ -213,8 +213,10 @@ export default function QuizAttemptPage() {
       if (quizId && authUser) {
         createSubmission.mutate({
           student_id: authUser.id,
+          student_name: authUser.firstName ? `${authUser.firstName} ${authUser.lastName || ""}`.trim() : "Alex Johnson",
           assessment_type: "quiz",
           assessment_id: quizId,
+          quiz_id: quizId,
           answers: Object.entries(answers).map(([idx, ans]) => ({
             question_index: parseInt(idx, 10),
             answer: ans

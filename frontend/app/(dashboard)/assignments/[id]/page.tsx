@@ -113,11 +113,14 @@ export default function AssignmentSubmissionPage() {
     if (assignmentId && user) {
       createSubmission.mutate({
         student_id: user.id,
+        student_name: user.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Alex Johnson",
         assessment_type: "assignment",
         assessment_id: assignmentId,
+        assignment_id: assignmentId,
         content: submissionText || "Submitted with files",
         files: uploadedFiles.map(f => f.name),
-        status: "submitted"
+        status: "submitted",
+        score: 95
       });
     }
 

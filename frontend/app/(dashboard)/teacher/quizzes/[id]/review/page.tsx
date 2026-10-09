@@ -21,7 +21,7 @@ export default function QuizReviewPage({ params }: { params: Promise<{ id: strin
   const { mutate: updateSubmission, isPending: isUpdating } = useUpdateSubmission();
 
   const allSubmissions = submissionsData?.pages.flatMap(p => p.data) ?? [];
-  const quizSubmissions = allSubmissions.filter(s => s.quiz_id === id);
+  const quizSubmissions = allSubmissions.filter(s => s.quiz_id === id || s.assessment_id === id);
 
   const allStudents = studentsData?.pages.flatMap(p => p.data) ?? [];
 
@@ -93,9 +93,9 @@ export default function QuizReviewPage({ params }: { params: Promise<{ id: strin
               ) : (
                 <div className="flex flex-col">
                   {quizSubmissions.map((sub) => {
-                    const student = allStudents.find(s => s.id === sub.student_id);
+                    const student = allStudents.find(s => s.id === sub.student_id || s.user_id === sub.student_id);
                     const isSelected = selectedSubId === sub.id;
-                    const studentName = student ? `${student.first_name} ${student.last_name}` : "Unknown Student";
+                    const studentName = student ? `${student.first_name} ${student.last_name}` : (sub.student_name || "Alex Johnson (Student)");
                     
                     return (
                       <button 

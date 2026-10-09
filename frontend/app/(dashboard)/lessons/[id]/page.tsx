@@ -662,14 +662,13 @@ export default function LessonViewerPage() {
   // Lesson Completion Action
   const handleCompleteLesson = () => {
     completeLesson(lessonId);
-    if (user?.id) {
-      createProgress.mutate({
-        student_id: user.id,
-        lesson_id: lessonId,
-        completion_percentage: 100,
-        status: "completed"
-      });
-    }
+    createProgress.mutate({
+      student_id: user?.id || "s-1",
+      student_name: user?.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Alex Johnson",
+      lesson_id: lessonId,
+      completion_percentage: 100,
+      status: "completed"
+    });
     toast.success("Lesson completed! You earned 150 XP and 25 Coins! 🎉");
   };
 

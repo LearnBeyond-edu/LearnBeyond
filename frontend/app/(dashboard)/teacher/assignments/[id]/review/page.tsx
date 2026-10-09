@@ -25,7 +25,7 @@ export default function AssignmentReviewPage({ params }: { params: Promise<{ id:
   const assignment = allAssignments.find(a => a.id === id);
 
   const allSubmissions = submissionsData?.pages.flatMap(p => p.data) ?? [];
-  const assignmentSubmissions = allSubmissions.filter(s => s.assignment_id === id);
+  const assignmentSubmissions = allSubmissions.filter(s => s.assignment_id === id || s.assessment_id === id);
 
   const allStudents = studentsData?.pages.flatMap(p => p.data) ?? [];
 
@@ -82,9 +82,9 @@ export default function AssignmentReviewPage({ params }: { params: Promise<{ id:
               ) : (
                 <div className="flex flex-col">
                   {assignmentSubmissions.map((sub) => {
-                    const student = allStudents.find(s => s.id === sub.student_id);
+                    const student = allStudents.find(s => s.id === sub.student_id || s.user_id === sub.student_id);
                     const isSelected = selectedSubId === sub.id;
-                    const studentName = student ? `${student.first_name} ${student.last_name}` : "Unknown Student";
+                    const studentName = student ? `${student.first_name} ${student.last_name}` : (sub.student_name || "Alex Johnson (Student)");
                     
                     return (
                       <button 

@@ -219,8 +219,11 @@ export const useProgress = (filters?: Record<string, any>) =>
 export const useCreateProgress = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: any) => api.post('/progress', payload),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: SCHOOL_KEYS.progress }); },
+    mutationFn: (payload: any) => progressService.create(payload),
+    onSuccess: () => { 
+      qc.invalidateQueries({ queryKey: SCHOOL_KEYS.progress }); 
+      qc.invalidateQueries({ queryKey: ['submissions'] });
+    },
     onError: (e: any) => { console.error("Progress save failed", e); },
   });
 };
@@ -286,7 +289,10 @@ export const useCreateSubmission = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: any) => submissionService.create(payload),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['submissions'] }); },
+    onSuccess: () => { 
+      qc.invalidateQueries({ queryKey: ['submissions'] }); 
+      qc.invalidateQueries({ queryKey: SCHOOL_KEYS.progress });
+    },
     onError: (e: any) => { console.error("Submission failed", e); },
   });
 };

@@ -177,12 +177,17 @@ export interface Submission {
   id: string;
   assignment_id?: string;
   quiz_id?: string;
+  lesson_id?: string;
+  assessment_id?: string;
+  assessment_type?: string;
   student_id: string;
+  student_name?: string;
   content: string | null;
   answers?: any; // JSONB
+  files?: string[];
   score: number | null;
   feedback: string | null;
-  status: 'pending' | 'graded' | 'returned';
+  status: 'pending' | 'graded' | 'returned' | 'submitted' | 'completed' | string;
   created_at: string;
   updated_at: string;
 }
