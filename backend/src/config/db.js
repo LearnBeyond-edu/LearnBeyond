@@ -2,16 +2,24 @@ const { Pool } = require('pg');
 const logger = require('../utils/logger');
 
 // Database configuration based on environment variables
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME || 'learnbeyond_db',
-  max: 20, // maximum number of clients in the pool
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+const pool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    })
+  : new Pool({
+      host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT || 5432,
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME || 'learnbeyond_db',
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
+    });
 
 pool.on('error', (err, client) => {
   logger.error(`Unexpected error on idle client: ${err.message}`);
