@@ -1,4 +1,4 @@
-LearnBeyond — Learning Beyond Boundaries
+**LearnBeyond — Learning Beyond Boundaries**
 
 An AI-powered personalized educational ecosystem connecting students, teachers, parents, and therapists.
 
