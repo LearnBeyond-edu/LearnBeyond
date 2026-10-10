@@ -2,16 +2,22 @@ import api from './api';
 
 export const authService = {
   login: async (credentials: any) => {
-    try {
-      const response = await api.post('/auth/login', credentials);
-      if (response?.data?.data?.user) {
-        return response.data;
+    // Only attempt localhost backend when running on localhost
+    const isLocalhost = typeof window === 'undefined' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const isRemoteBackend = process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes('localhost') && !process.env.NEXT_PUBLIC_API_URL.includes('127.0.0.1');
+
+    if (isLocalhost || isRemoteBackend) {
+      try {
+        const response = await api.post('/auth/login', credentials);
+        if (response?.data?.data?.user) {
+          return response.data;
+        }
+      } catch (_networkError: any) {
+        // Backend not running or unseeded; proceed smoothly with demo session
       }
-    } catch (_networkError: any) {
-      // Backend not running or unseeded; proceed smoothly with demo session
     }
 
-    // Fast fallback for instantaneous response (under 0.5s) on local/demo
+    // Fast fallback for instantaneous response (under 0.1s) on deployed Netlify/demo
     const email = String(credentials?.email || "").toLowerCase();
     let role = "Student";
     let firstName = "Johnny";
@@ -62,6 +68,8 @@ export const authService = {
           role_name: role,
           role,
           institution_id: "8dffb045-b42c-484d-aa27-b13a93f9790b",
+          institutionId: "8dffb045-b42c-484d-aa27-b13a93f9790b",
+          isActive: true,
           is_active: true
         }
       }

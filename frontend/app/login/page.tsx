@@ -26,7 +26,7 @@ import { Loader2 } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Invalid email address" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+  password: z.string().min(1, { message: "Password is required" }),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -35,24 +35,28 @@ export default function LoginPage() {
   const router = useRouter();
   const { setAuth, isAuthenticated, user } = useAuthStore();
 
+  const getDashboardRoute = React.useCallback((userObj: any) => {
+    const roleStr = String(userObj?.role || userObj?.role_name || "").toLowerCase().trim();
+    if (roleStr.includes('platform') || roleStr === 'super_admin' || roleStr === 'admin' || roleStr === 'platform_admin') {
+      return "/admin";
+    } else if (roleStr.includes('institution') || roleStr.includes('school') || roleStr === 'school_admin') {
+      return "/school";
+    } else if (roleStr.includes('teacher') || roleStr.includes('staff')) {
+      return "/teacher";
+    } else if (roleStr.includes('parent')) {
+      return "/parent";
+    } else if (roleStr.includes('therapist')) {
+      return "/therapist";
+    }
+    return "/dashboard";
+  }, []);
+
   React.useEffect(() => {
     if (isAuthenticated && user) {
-      const roleStr = String(user.role || (user as any).role_name || "").toLowerCase().trim();
-      if (roleStr.includes('platform') || roleStr === 'super_admin' || roleStr === 'admin' || roleStr === 'platform_admin') {
-        router.push("/admin");
-      } else if (roleStr.includes('institution') || roleStr.includes('school') || roleStr === 'school_admin') {
-        router.push("/school");
-      } else if (roleStr.includes('teacher') || roleStr.includes('staff')) {
-        router.push("/teacher");
-      } else if (roleStr.includes('parent')) {
-        router.push("/parent");
-      } else if (roleStr.includes('therapist')) {
-        router.push("/therapist");
-      } else {
-        router.push("/dashboard");
-      }
+      const target = getDashboardRoute(user);
+      router.push(target);
     }
-  }, [isAuthenticated, user, router]);
+  }, [isAuthenticated, user, router, getDashboardRoute]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -90,24 +94,20 @@ export default function LoginPage() {
       if (user.first_name && !user.firstName) user.firstName = user.first_name;
       if (user.last_name !== undefined && user.lastName === undefined) user.lastName = user.last_name;
       if (user.institution_id && !user.institutionId) user.institutionId = user.institution_id;
+      user.isActive = true;
       
       setAuth(user, accessToken, refreshToken);
       toast.success(`Welcome back, ${user.firstName || canonicalRole}!`);
       
-      // Strict role-based routing
-      if (canonicalRole === 'Platform Admin') {
-        router.push("/admin");
-      } else if (canonicalRole === 'Institution Admin') {
-        router.push("/school");
-      } else if (canonicalRole === 'Teacher') {
-        router.push("/teacher");
-      } else if (canonicalRole === 'Parent') {
-        router.push("/parent");
-      } else if (canonicalRole === 'Therapist') {
-        router.push("/therapist");
-      } else {
-        router.push("/dashboard");
-      }
+      const targetRoute = getDashboardRoute(user);
+      router.push(targetRoute);
+
+      // Reliable navigation fallback for deployed environments like Netlify
+      setTimeout(() => {
+        if (typeof window !== 'undefined' && window.location.pathname.includes('/login')) {
+          window.location.href = targetRoute;
+        }
+      }, 150);
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || "Failed to login. Please try again.");
@@ -131,15 +131,7 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form 
-              method="POST" 
-              action="#" 
-              onSubmit={(e) => {
-                e.preventDefault();
-                form.handleSubmit(onSubmit)(e);
-              }} 
-              className="space-y-4"
-            >
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
                 name="email"
