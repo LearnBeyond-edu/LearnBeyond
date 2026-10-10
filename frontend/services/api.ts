@@ -38,33 +38,31 @@ api.interceptors.response.use(
 
       try {
         const refreshToken = useAuthStore.getState().refreshToken;
-        if (!refreshToken) throw new Error("No refresh token available");
+        // If no refresh token or it's a demo session, don't attempt refresh or trigger logout
+        if (!refreshToken || refreshToken.startsWith('demo_')) {
+          return Promise.reject(error);
+        }
 
-        // Attempt to refresh the token
+        // Attempt to refresh the token only if on a real backend
         const refreshResponse = await axios.post(
           `${API_URL}/auth/refresh`,
           { refreshToken },
           { withCredentials: true }
         );
 
-        const newAccessToken = refreshResponse.data.data.accessToken;
-        const newRefreshToken = refreshResponse.data.data.refreshToken;
+        const newAccessToken = refreshResponse.data?.data?.accessToken;
+        const newRefreshToken = refreshResponse.data?.data?.refreshToken;
 
-        // Update Zustand store
-        useAuthStore.getState().setTokens(newAccessToken, newRefreshToken);
+        if (newAccessToken) {
+          // Update Zustand store
+          useAuthStore.getState().setTokens(newAccessToken, newRefreshToken);
 
-        // Update Authorization header for original request and retry
-        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-        return api(originalRequest);
-      } catch (refreshError) {
-        // Refresh token is expired or invalid
-        useAuthStore.getState().logout();
-        
-        // Only redirect if we are on client side
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+          // Update Authorization header for original request and retry
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+          return api(originalRequest);
         }
-        
+      } catch (refreshError) {
+        // Do not force window.location redirects on failed refresh
         return Promise.reject(refreshError);
       }
     }

@@ -18,10 +18,14 @@ export function AuthGuard({ children, allowedRoles }: { children: React.ReactNod
 
   useEffect(() => {
     // Wait for Zustand persist middleware to hydrate from localStorage
-    setIsHydrated(useAuthStore.persist.hasHydrated());
+    if (useAuthStore.persist.hasHydrated()) {
+      setIsHydrated(true);
+    }
     const unsub = useAuthStore.persist.onFinishHydration(() => setIsHydrated(true));
+    const timer = setTimeout(() => setIsHydrated(true), 50);
     return () => {
       if (unsub) unsub();
+      clearTimeout(timer);
     };
   }, []);
 
