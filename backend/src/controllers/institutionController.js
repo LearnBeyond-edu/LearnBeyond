@@ -40,23 +40,35 @@ class InstitutionController {
 
   async create(req, res, next) {
     try {
-      const { password, contact_email, name, ...rest } = req.body;
-      const institution = await institutionRepository.create({ ...rest, contact_email, name });
+      const { password, contact_email, email, name, ...rest } = req.body;
+      const adminEmail = contact_email || email;
+      const institution = await institutionRepository.create({ ...rest, contact_email: adminEmail, name });
       
-      if (password && contact_email) {
+      if (password && adminEmail) {
         // Fetch role_id for Institution Admin
         const { query } = require('../config/db');
         const roleRes = await query(`SELECT id FROM roles WHERE role_name = 'Institution Admin'`);
         if (roleRes.rows.length > 0) {
           const authService = require('../services/authService');
-          await authService.registerUser({
-            email: contact_email,
-            password: password,
-            role_id: roleRes.rows[0].id,
-            first_name: 'School',
-            last_name: 'Admin',
-            institution_id: institution.id
-          });
+          try {
+            await authService.registerUser({
+              email: adminEmail,
+              password: password,
+              role_id: roleRes.rows[0].id,
+              first_name: name || 'School',
+              last_name: 'Admin',
+              institution_id: institution.id
+            });
+          } catch (regErr) {
+            const bcrypt = require('bcrypt');
+            const passwordHash = await bcrypt.hash(password, 10);
+            await query(
+              `UPDATE users 
+               SET institution_id = $1, password_hash = $2, role_id = $3, is_active = true 
+               WHERE LOWER(email) = LOWER($4)`,
+              [institution.id, passwordHash, roleRes.rows[0].id, adminEmail]
+            );
+          }
         }
       }
 

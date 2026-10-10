@@ -26,7 +26,7 @@ export default function ParentChildProfilePage() {
   const { data: progressData, isLoading: progressLoading } = useProgress({ student_id: childId });
   const { data: assignmentsData } = useAssignments();
   const { data: quizzesData } = useQuizzes();
-  const { data: submissionsData } = useSubmissions({ student_id: childId }, 100);
+  const { data: submissionsData } = useSubmissions({}, 100);
   const { data: lessonsData } = useLessons();
   const { data: notificationsData } = useNotifications();
   const [parentNote, setParentNote] = useState("");
@@ -57,9 +57,14 @@ export default function ParentChildProfilePage() {
   const lessons = flattenInfinitePages(lessonsData);
   const notifications = notificationsData?.data ?? [];
 
-  const childAttendance = attendance.filter((entry) => entry.student_id === childId);
-  const childProgress = progress.filter((entry) => entry.student_id === childId);
-  const childSubmissions = submissions.filter((entry) => entry.student_id === childId);
+  const childAttendance = attendance.filter((entry) => entry.student_id === childId || (student?.user_id && entry.student_id === student.user_id));
+  const childProgress = progress.filter((entry) => entry.student_id === childId || (student?.user_id && entry.student_id === student.user_id));
+  const childSubmissions = submissions.filter((entry) => 
+    entry.student_id === childId || 
+    entry.student_id === student?.id || 
+    entry.student_id === student?.user_id || 
+    (student?.first_name && entry.student_name && entry.student_name.toLowerCase().includes(student.first_name.toLowerCase()))
+  );
   const classIds = new Map<string, number>();
   childAttendance.forEach((record) => classIds.set(record.class_id, (classIds.get(record.class_id) ?? 0) + 1));
   let primaryClassId = [...classIds.entries()].sort((left, right) => right[1] - left[1])[0]?.[0];
@@ -67,15 +72,15 @@ export default function ParentChildProfilePage() {
      primaryClassId = student.class_id;
   }
 
-  const assignmentSubmissions = childSubmissions.filter((s: any) => s.assessment_type !== "quiz");
-  const quizSubmissions = childSubmissions.filter((s: any) => s.assessment_type === "quiz");
+  const assignmentSubmissions = childSubmissions.filter((s: any) => s.assessment_type !== "quiz" && !s.quiz_id);
+  const quizSubmissions = childSubmissions.filter((s: any) => s.assessment_type === "quiz" || s.quiz_id);
   
   // Merge backend data with local storage simulation data for demo purposes
   const localActivities = localStore?.recentActivity || [];
   const localCompletedLessons = localStore?.completedLessons || [];
   const localBadges = (localStore?.badges || []).filter((b: any) => b.unlocked);
   
-  const allScores = [...childProgress.map((entry) => (entry as any).completion_percentage ?? 100), ...localActivities.filter((a: any) => a.score !== undefined).map((a: any) => a.score)];
+  const allScores = [...childProgress.map((entry) => (entry as any).completion_percentage ?? 100), ...childSubmissions.filter(s => s.score !== null && s.score !== undefined).map(s => s.score), ...localActivities.filter((a: any) => a.score !== undefined).map((a: any) => a.score)];
   const childScore = allScores.length > 0 ? average(allScores) : 0;
   const attendanceRate = childAttendance.length ? Math.round((childAttendance.filter((entry) => entry.status === "present").length / childAttendance.length) * 100) : (localStore ? 100 : 0);
   const lessonCount = childProgress.length;
@@ -93,7 +98,7 @@ export default function ParentChildProfilePage() {
   const timeline = [
     ...childProgress.map((entry) => ({
       id: entry.id,
-      sortAt: new Date((entry as any).updated_at).getTime(),
+      sortAt: new Date((entry as any).updated_at || 0).getTime(),
       title: `Completed ${(entry as any).completion_percentage ?? 100}% of ${lessons.find((lesson) => lesson.id === entry.lesson_id)?.title ?? "a lesson"}`,
       detail: formatDateValue((entry as any).updated_at),
       icon: Star,
@@ -107,9 +112,9 @@ export default function ParentChildProfilePage() {
     })),
     ...childSubmissions.map((entry) => ({
       id: entry.id,
-      sortAt: new Date(entry.updated_at).getTime(),
-      title: `${entry.status === "graded" ? "Graded" : "Submitted"} ${(entry as any).assessment_type === "assignment" ? "assignment" : "quiz"}`,
-      detail: formatDateValue(entry.updated_at),
+      sortAt: new Date(entry.updated_at || entry.created_at || new Date()).getTime(),
+      title: `${entry.status === "graded" ? `Graded (${entry.score ?? 0}%)` : "Submitted"} ${(entry as any).assessment_type === "assignment" || (entry as any).assignment_id ? "assignment" : "quiz"}`,
+      detail: formatDateValue(entry.updated_at || entry.created_at || new Date().toISOString()),
       icon: FileText,
     })),
     ...localActivities.map((act: any) => ({
@@ -227,24 +232,43 @@ export default function ParentChildProfilePage() {
 
         <TabsContent value="assignments" className="space-y-4">
           <Card className="border-border/60">
-            <CardHeader><CardTitle className="text-base">Assignments</CardTitle><CardDescription>Completed assignment submissions and status.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="text-base">Assignments</CardTitle><CardDescription>Completed assignment submissions, teacher reviews, and scores.</CardDescription></CardHeader>
             <CardContent className="space-y-3">
               {assignmentSubmissions.length === 0 ? (
                 <EmptyState icon={<FileText className="h-10 w-10" />} title="No assignments submitted" description="Student has not submitted any assignments yet." />
               ) : (
                 <div className="space-y-3">
-                  {assignmentSubmissions.map((sub: any) => (
-                    <div key={sub.id} className="flex items-center justify-between p-3.5 rounded-xl border bg-muted/20 hover:bg-muted/40 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2.5 h-2.5 rounded-full shadow-sm bg-violet-500 shadow-violet-500/20" />
-                        <div>
-                          <p className="text-sm font-semibold font-mono">Assignment {sub.assessment_id?.slice(0, 8) || sub.assignment_id?.slice(0, 8) || sub.id.slice(0, 8)}</p>
-                          <p className="text-xs text-muted-foreground">{format(new Date(sub.updated_at || sub.created_at || new Date()), "MMM d, yyyy")}</p>
+                  {assignmentSubmissions.map((sub: any) => {
+                    const matchedAsgn = assignments.find(a => a.id === sub.assignment_id || a.id === sub.assessment_id);
+                    const title = matchedAsgn?.title || (sub.assessment_id ? `Assignment (${sub.assessment_id.slice(0, 8)})` : "Homework Assignment");
+                    return (
+                      <div key={sub.id} className="p-4 rounded-xl border bg-muted/20 hover:bg-muted/40 transition-colors space-y-2">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            <div className="w-2.5 h-2.5 rounded-full shadow-sm bg-violet-500 shadow-violet-500/20 mt-1.5 shrink-0" />
+                            <div>
+                              <p className="text-sm font-bold">{title}</p>
+                              <p className="text-xs text-muted-foreground">{format(new Date(sub.updated_at || sub.created_at || new Date()), "MMM d, yyyy · h:mm a")}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            {sub.score !== null && sub.score !== undefined && (
+                              <span className="text-base font-extrabold text-violet-600 dark:text-violet-400">{sub.score}/100</span>
+                            )}
+                            <Badge variant="outline" className="text-xs capitalize font-semibold border-violet-500/30 text-violet-600 bg-violet-500/10">
+                              {sub.status || "Submitted"}
+                            </Badge>
+                          </div>
                         </div>
+                        {sub.feedback && (
+                          <div className="ml-5 p-2.5 rounded-lg bg-violet-500/5 border border-violet-500/20 text-xs text-muted-foreground">
+                            <span className="font-bold text-foreground">Teacher Feedback: </span>
+                            <span className="italic">"{sub.feedback}"</span>
+                          </div>
+                        )}
                       </div>
-                      <span className="text-sm font-bold text-violet-500">{sub.status || "Submitted"}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -253,29 +277,41 @@ export default function ParentChildProfilePage() {
 
         <TabsContent value="quizzes" className="space-y-4">
           <Card className="border-border/60">
-            <CardHeader><CardTitle className="text-base">Quiz results</CardTitle><CardDescription>Completed quizzes and final scores.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="text-base">Quiz results</CardTitle><CardDescription>Completed quizzes, final evaluations, and performance scores.</CardDescription></CardHeader>
             <CardContent className="space-y-3">
               {quizSubmissions.length === 0 ? (
                 <EmptyState icon={<CheckSquare className="h-10 w-10" />} title="No quiz results" description="Student has not completed any quizzes yet." />
               ) : (
                 <div className="space-y-3">
-                  {quizSubmissions.map((sub: any) => (
-                    <div key={sub.id} className="flex items-center justify-between p-3.5 rounded-xl border bg-muted/20 hover:bg-muted/40 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="w-2.5 h-2.5 rounded-full shadow-sm bg-orange-500 shadow-orange-500/20" />
-                        <div>
-                          <p className="text-sm font-semibold font-mono">Quiz {sub.assessment_id?.slice(0, 8) || sub.quiz_id?.slice(0, 8) || sub.id.slice(0, 8)}</p>
-                          <p className="text-xs text-muted-foreground">{format(new Date(sub.updated_at || sub.created_at || new Date()), "MMM d, yyyy")}</p>
+                  {quizSubmissions.map((sub: any) => {
+                    const matchedQuiz = quizzes.find(q => q.id === sub.quiz_id || q.id === sub.assessment_id);
+                    const title = matchedQuiz?.title || (sub.assessment_id ? `Quiz (${sub.assessment_id.slice(0, 8)})` : "Class Quiz");
+                    return (
+                      <div key={sub.id} className="p-4 rounded-xl border bg-muted/20 hover:bg-muted/40 transition-colors space-y-2">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-3">
+                            <div className="w-2.5 h-2.5 rounded-full shadow-sm bg-orange-500 shadow-orange-500/20 mt-1.5 shrink-0" />
+                            <div>
+                              <p className="text-sm font-bold">{title}</p>
+                              <p className="text-xs text-muted-foreground">{format(new Date(sub.updated_at || sub.created_at || new Date()), "MMM d, yyyy · h:mm a")}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-base font-extrabold text-orange-600 dark:text-orange-400">{sub.score ?? 100}%</span>
+                            <Badge variant="outline" className="text-xs capitalize font-semibold border-orange-500/30 text-orange-600 bg-orange-500/10">
+                              {sub.status || "Graded"}
+                            </Badge>
+                          </div>
                         </div>
+                        {sub.feedback && (
+                          <div className="ml-5 p-2.5 rounded-lg bg-orange-500/5 border border-orange-500/20 text-xs text-muted-foreground">
+                            <span className="font-bold text-foreground">Teacher Evaluation: </span>
+                            <span className="italic">"{sub.feedback}"</span>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-4">
-                        <span className="text-sm font-bold">{sub.score}%</span>
-                        <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-orange-500/10 text-orange-700 dark:text-orange-400">
-                          {sub.status || "Graded"}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

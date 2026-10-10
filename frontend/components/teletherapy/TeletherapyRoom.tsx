@@ -10,26 +10,30 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useEffect } from "react";
 import { safeReadLocalStorage, safeWriteLocalStorage } from "@/lib/therapist";
 
-export function TeletherapyRoom({ recipientName, role = "therapist" }: { recipientName: string, role?: "therapist" | "student" }) {
+export function TeletherapyRoom({ recipientName, role = "therapist", sessionId }: { recipientName: string, role?: "therapist" | "student", sessionId?: string }) {
   const { user } = useAuthStore();
   const [message, setMessage] = useState("");
   const [chatLog, setChatLog] = useState<{sender: string, text: string, time: string}[]>([]);
 
+  const chatStorageKey = sessionId 
+    ? `teletherapy-chat-session-${sessionId}`
+    : `teletherapy-chat-log-${user?.institutionId || user?.id || 'default'}`;
+
   // Load chat log from localStorage
   useEffect(() => {
     const loadChat = () => {
-      const saved = safeReadLocalStorage<{sender: string, text: string, time: string}[] | null>("teletherapy-chat-log", null);
-      if (saved) {
+      const saved = safeReadLocalStorage<{sender: string, text: string, time: string}[] | null>(chatStorageKey, null);
+      if (saved && saved.length > 0) {
         setChatLog(saved);
       } else {
-        setChatLog([{ sender: "System", text: "End-to-end encryption enabled. Session recorded for clinical notes.", time: new Date().toISOString() }]);
+        setChatLog([{ sender: "System", text: "End-to-end encrypted teletherapy channel started.", time: new Date().toISOString() }]);
       }
     };
     
     loadChat();
     window.addEventListener("storage", loadChat);
     return () => window.removeEventListener("storage", loadChat);
-  }, []);
+  }, [chatStorageKey]);
 
   const handleSend = () => {
     if (!message.trim()) return;
@@ -38,7 +42,7 @@ export function TeletherapyRoom({ recipientName, role = "therapist" }: { recipie
     const updatedLog = [...chatLog, newMessage];
     
     setChatLog(updatedLog);
-    safeWriteLocalStorage("teletherapy-chat-log", updatedLog);
+    safeWriteLocalStorage(chatStorageKey, updatedLog);
     window.dispatchEvent(new Event("storage"));
     
     setMessage("");

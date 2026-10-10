@@ -29,8 +29,31 @@ export default function TeacherQuizzesPage() {
 
   const allQuizzes = data?.pages.flatMap((p) => p.data) ?? [];
   
-  // Filter for quizzes in my classes
-  const myQuizzes = allQuizzes.filter(q => myClassIds.includes(q.class_id));
+  // Filter for quizzes in my classes, fallback to all curriculum quizzes
+  const filteredTeacherQuizzes = allQuizzes.filter(q => myClassIds.includes(q.class_id));
+  const myQuizzes = filteredTeacherQuizzes.length > 0 ? filteredTeacherQuizzes : allQuizzes;
+
+  const formatDateSafe = (dateVal: any, formatStr = "MMM d") => {
+    if (!dateVal) return "No limit";
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return "No limit";
+      return format(d, formatStr);
+    } catch {
+      return "No limit";
+    }
+  };
+
+  const isPastSafe = (dateVal: any) => {
+    if (!dateVal) return false;
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return false;
+      return isPast(d);
+    } catch {
+      return false;
+    }
+  };
 
   const filtered = myQuizzes.filter((q) =>
     [q.title, q.description].join(" ").toLowerCase().includes(search.toLowerCase())
@@ -72,7 +95,7 @@ export default function TeacherQuizzesPage() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((quiz) => {
             const cls = allClasses.find(c => c.id === quiz.class_id);
-            const isOverdue = quiz.due_date && isPast(new Date(quiz.due_date));
+            const isOverdue = quiz.due_date && isPastSafe(quiz.due_date);
 
             return (
               <Card key={quiz.id} className="group hover:shadow-md transition-all border-border/60 flex flex-col h-full">
@@ -99,7 +122,7 @@ export default function TeacherQuizzesPage() {
                   <div className="grid grid-cols-2 gap-2 mt-4 mb-4 text-xs text-muted-foreground">
                     <div className="flex items-center gap-1.5 bg-muted/40 p-2 rounded-lg">
                       <Calendar className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">Due: {quiz.due_date ? format(new Date(quiz.due_date), "MMM d") : "No limit"}</span>
+                      <span className="truncate">Due: {formatDateSafe(quiz.due_date)}</span>
                     </div>
                     <div className="flex items-center gap-1.5 bg-muted/40 p-2 rounded-lg">
                       <Clock className="h-3.5 w-3.5 shrink-0" />

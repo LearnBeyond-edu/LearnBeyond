@@ -31,8 +31,9 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // If 401 Unauthorized and we haven't tried to refresh yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // If 401 Unauthorized, not an auth endpoint, and we haven't tried to refresh yet
+    const isAuthEndpoint = originalRequest?.url?.includes('/auth/login') || originalRequest?.url?.includes('/auth/register');
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true;
 
       try {

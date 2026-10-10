@@ -31,9 +31,22 @@ export default function ParentProgressPage() {
   }, [selectedChildId, students]);
 
   const selectedChild = students.find((child) => child.id === selectedChildId) ?? students[0];
-  const selectedProgress = selectedChild ? progress.filter((entry) => entry.student_id === selectedChild.id) : progress;
-  const selectedSubmissions = selectedChild ? submissions.filter((entry) => entry.student_id === selectedChild.id) : submissions;
-  const avgScore = average(selectedProgress.map((entry) => (entry as any).completion_percentage ?? 100));
+  const selectedProgress = selectedChild ? progress.filter((entry) => 
+    entry.student_id === selectedChild.id || 
+    (selectedChild.user_id && entry.student_id === selectedChild.user_id) ||
+    (selectedChild.first_name && (entry as any).student_name && (entry as any).student_name.toLowerCase().includes(selectedChild.first_name.toLowerCase()))
+  ) : progress;
+  const selectedSubmissions = selectedChild ? submissions.filter((entry) => 
+    entry.student_id === selectedChild.id || 
+    (selectedChild.user_id && entry.student_id === selectedChild.user_id) ||
+    (selectedChild.first_name && entry.student_name && entry.student_name.toLowerCase().includes(selectedChild.first_name.toLowerCase()))
+  ) : submissions;
+
+  const allScores = [
+    ...selectedProgress.map((entry) => (entry as any).completion_percentage ?? (entry as any).score ?? 100),
+    ...selectedSubmissions.filter((s) => s.score !== null && s.score !== undefined).map((s) => s.score as number)
+  ];
+  const avgScore = allScores.length > 0 ? average(allScores) : 0;
   const completedCount = selectedProgress.filter((entry) => entry.status === "completed").length;
   const lessonCount = new Set(selectedProgress.map((entry) => entry.lesson_id)).size;
 

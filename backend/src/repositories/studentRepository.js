@@ -65,7 +65,8 @@ class StudentRepository extends BaseRepository {
       FROM student_profiles sp
       JOIN users u ON sp.user_id = u.id
       LEFT JOIN institutions i ON u.institution_id = i.id
-      WHERE sp.id = $1
+      WHERE sp.id = $1 OR sp.user_id = $1
+      LIMIT 1
     `;
     const result = await query(queryStr, [id]);
     return result.rows[0];

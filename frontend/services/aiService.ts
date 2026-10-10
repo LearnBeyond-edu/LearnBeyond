@@ -2,10 +2,59 @@
 
 export async function getYouTubeVideoId(query: string): Promise<string | null> {
   try {
-    const res = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
+    if (!query || typeof query !== "string") return null;
+
+    // 1. Direct URL extraction if query is already a YouTube URL with standard video ID
+    const directMatch = query.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+    if (directMatch && directMatch[1] && !directMatch[1].includes("YOUR_URL")) {
+      return directMatch[1];
+    }
+
+    // 2. If query is directly an 11-character video ID
+    if (/^[a-zA-Z0-9_-]{11}$/.test(query.trim())) {
+      return query.trim();
+    }
+
+    // 3. Extract search query if embedded in URL parameters (e.g. list=... or search_query=...)
+    let searchQuery = query;
+    const urlParamMatch = query.match(/[?&](?:list|search_query|q)=([^&]+)/);
+    if (urlParamMatch && urlParamMatch[1]) {
+      searchQuery = decodeURIComponent(urlParamMatch[1].replace(/\+/g, " "));
+    } else {
+      searchQuery = query.replace(/^https?:\/\/\S+/g, "").trim();
+    }
+
+    // Clean up query terms
+    searchQuery = searchQuery.replace(/[^a-zA-Z0-9\s-]/g, " ").trim();
+    if (!searchQuery) return null;
+
+    // If query doesn't specify detailed explanation or lesson, enhance search terms for in-depth educational coverage
+    const searchKeywords = /\b(explained|lesson|tutorial|crash course|in depth|guide)\b/i.test(searchQuery)
+      ? searchQuery
+      : `${searchQuery} full lesson in detail explained`;
+
+    const res = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(searchKeywords)}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      }
+    });
+
     const html = await res.text();
-    const match = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
-    if (match && match[1]) return match[1];
+
+    // Match 1: Extract from videoRenderer (exact top search result)
+    const matchRenderer = html.match(/"videoRenderer":\s*\{\s*"videoId":"([a-zA-Z0-9_-]{11})"/);
+    if (matchRenderer && matchRenderer[1]) return matchRenderer[1];
+
+    // Match 2: General JSON videoId payload
+    const matchJson = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
+    if (matchJson && matchJson[1]) return matchJson[1];
+
+    // Match 3: href /watch?v=
+    const matchWatch = html.match(/\/watch\?v=([a-zA-Z0-9_-]{11})/);
+    if (matchWatch && matchWatch[1]) return matchWatch[1];
+
   } catch (e) {
     console.error("YouTube search error:", e);
   }
@@ -148,8 +197,15 @@ export async function generateAIResponse(prompt: string, preferGroq: boolean = f
       if (match && match[1]) extractedTopic = match[1];
 
       // Use REAL YouTube Scraper to guarantee exact proper video
-      const vidId1 = await getYouTubeVideoId(extractedTopic + " educational video") || "1xSQlwWGT8M";
-      const vidId2 = await getYouTubeVideoId(extractedTopic + " crash course") || "1xSQlwWGT8M";
+      const vidId1 = await getYouTubeVideoId(`${extractedTopic} full lesson in detail explained`);
+      const vidId2 = await getYouTubeVideoId(`${extractedTopic} crash course complete explanation`);
+
+      const video1Url = vidId1
+        ? `https://www.youtube.com/embed/${vidId1}`
+        : `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(extractedTopic + " full lesson in detail explained")}`;
+      const video2Url = vidId2
+        ? `https://www.youtube.com/embed/${vidId2}`
+        : `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(extractedTopic + " crash course complete tutorial")}`;
 
       let calibrationText = "";
       const t = extractedTopic.toLowerCase();
@@ -166,8 +222,8 @@ export async function generateAIResponse(prompt: string, preferGroq: boolean = f
         description: `An engaging and highly detailed lesson plan tailored for students learning about ${extractedTopic}.`,
         content: `Learning Objectives:\n- Understand the core principles of ${extractedTopic}.\n- Apply knowledge to real-world scenarios.\n- Master the fundamental formulas and concepts.\n\nDetailed Proper Notes:\nWelcome to today's lesson on ${extractedTopic}!\n\nThis lesson covers the fundamental concepts, theories, and practical applications of ${extractedTopic}. Students will engage with interactive materials, review core formulas, and understand the historical context and modern applications of this subject.\n\n${calibrationText}\n\nAssignment:\nComplete the worksheet provided in class. Review the recommended videos attached in the Learning Materials section.`,
         youtube_videos: [
-          { title: `Top Result: ${extractedTopic}`, url: `https://www.youtube.com/embed/${vidId1}` },
-          { title: `In-Depth: ${extractedTopic}`, url: `https://www.youtube.com/embed/${vidId2}` }
+          { title: `In-Depth Lesson: ${extractedTopic}`, url: video1Url },
+          { title: `Visual Walkthrough: ${extractedTopic}`, url: video2Url }
         ]
       });
     }

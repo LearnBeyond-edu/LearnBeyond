@@ -83,7 +83,7 @@ export default function CreateLessonPage() {
       Ensure the prompts describe literal, highly accurate, real-world objects. DO NOT use abstract or sci-fi descriptions unless the topic is sci-fi. Every layer MUST have an array of 2-3 hotspots pointing out specific anatomical or mechanical parts of that layer. x and y are percentages (0-100).
       
       5) Assignment/Activity.
-      "youtube_videos": An array of EXACTLY 2 highly relevant educational YouTube video objects. Each object MUST have "title" (string) and "url". For the URL, you MUST format it EXACTLY like this search URL so it automatically searches and plays the exact proper video: "https://www.youtube.com/embed?listType=search&list=YOUR_URL_ENCODED_SEARCH_QUERY". For example, if the topic is "Voltage and Current", the url MUST be "https://www.youtube.com/embed?listType=search&list=voltage+and+current+explained+for+students".
+      "youtube_videos": An array of EXACTLY 2 highly relevant educational YouTube video objects specifically showcasing and explaining "${topic}" in detail. Each object MUST have "title" (descriptive title) and "search_query" (e.g. "${topic} full lesson in detail explained").
       Return ONLY valid JSON. Do not wrap in markdown code blocks.`;
 
       const aiResponse = await generateAIResponse(prompt, true); // True defaults to Groq for speed
@@ -141,32 +141,73 @@ export default function CreateLessonPage() {
         form.setValue("description", parsed.description || `An introductory lesson about ${topic}.`);
         form.setValue("content", finalContent);
 
-        if (parsed.youtube_videos && Array.isArray(parsed.youtube_videos) && parsed.youtube_videos.length > 0) {
-          const newAttachments: Attachment[] = [];
-          for (const video of parsed.youtube_videos) {
-            if (!video.title) continue;
-            
-            // AI often hallucinates URLs or uses blocked listType=search. We use the real backend scraper instead.
-            const realVideoId = await getYouTubeVideoId(video.title + " educational");
-            if (!realVideoId) continue; // If we can't find a real video, don't show anything.
+        // Automatically fetch and attach genuine YouTube reference videos specifically for this topic
+        const videoSources = (parsed.youtube_videos && Array.isArray(parsed.youtube_videos) && parsed.youtube_videos.length > 0)
+          ? parsed.youtube_videos
+          : [
+              { title: `${topic} - In-Depth Lesson & Explanation`, search_query: `${topic} full lesson in detail explained` },
+              { title: `${topic} - Visual Walkthrough & Core Concepts`, search_query: `${topic} crash course step by step` }
+            ];
 
-            const attachment: Attachment = {
-              label: video.title || "YouTube Video",
-              type: "youtube",
-              size: "Link",
-              url: `https://www.youtube.com/embed/${realVideoId}`
-            };
-            await saveAttachment("temp", attachment);
-            newAttachments.push(attachment);
-          }
+        const newAttachments: Attachment[] = [];
+        for (let i = 0; i < videoSources.length; i++) {
+          const video = videoSources[i];
+          const defaultTitle = i === 0 ? `${topic} - In-Depth Lesson` : `${topic} - Visual Walkthrough`;
+          const videoTitle = video.title || defaultTitle;
+          const searchQuery = video.search_query || video.query || `${topic} full lesson in detail explained`;
+          const realVideoId = await getYouTubeVideoId(searchQuery) || await getYouTubeVideoId(`${topic} ${videoTitle}`);
+
+          const videoUrl = realVideoId
+            ? `https://www.youtube.com/embed/${realVideoId}`
+            : `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(topic + " " + videoTitle + " full lesson in detail explained")}`;
+
+          const attachment: Attachment = {
+            label: videoTitle,
+            type: "youtube",
+            size: "Link",
+            url: videoUrl
+          };
+          await saveAttachment("temp", attachment);
+          newAttachments.push(attachment);
+        }
+
+        if (newAttachments.length > 0) {
           setAttachments(prev => [...prev, ...newAttachments]);
-          toast.success(`AI automatically attached ${newAttachments.length} related videos!`);
+          toast.success(`AI automatically attached ${newAttachments.length} reference videos!`);
         }
       } catch (parseError) {
         // Fallback if AI formatting fails completely
         form.setValue("title", `Exploring ${topic}`);
         form.setValue("description", `An introductory lesson about ${topic} tailored for middle-school comprehension.`);
         form.setValue("content", aiResponse);
+
+        // Attach topic-specific reference videos even in fallback mode
+        try {
+          const fallbackVid1 = await getYouTubeVideoId(`${topic} full lesson in detail explained`) || "";
+          const fallbackVid2 = await getYouTubeVideoId(`${topic} crash course step by step`) || "";
+
+          const fallbackAttachments: Attachment[] = [
+            {
+              label: `${topic} - In-Depth Lesson`,
+              type: "youtube",
+              size: "Link",
+              url: fallbackVid1 ? `https://www.youtube.com/embed/${fallbackVid1}` : `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(topic + " full lesson in detail explained")}`
+            },
+            {
+              label: `${topic} - Visual Walkthrough`,
+              type: "youtube",
+              size: "Link",
+              url: fallbackVid2 ? `https://www.youtube.com/embed/${fallbackVid2}` : `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(topic + " crash course step by step")}`
+            }
+          ];
+
+          for (const a of fallbackAttachments) {
+            await saveAttachment("temp", a);
+          }
+          setAttachments(fallbackAttachments);
+        } catch (ytErr) {
+          console.error("Fallback video attachment error:", ytErr);
+        }
       }
     } catch (error) {
       console.error(error);

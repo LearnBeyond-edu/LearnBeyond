@@ -51,7 +51,7 @@ export default function StudentTherapyPage() {
             subtitle={`Live clinical session`}
             actions={<Button variant="outline" onClick={() => setActiveSession(null)}><ArrowLeft className="h-4 w-4 mr-2" /> Leave Session</Button>}
           />
-          <TeletherapyRoom recipientName="Dr. Therapist" role="student" />
+          <TeletherapyRoom recipientName="Dr. Therapist" role="student" sessionId={activeSession.id} />
         </>
       ) : (
         <>

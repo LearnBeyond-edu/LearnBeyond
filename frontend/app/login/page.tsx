@@ -37,10 +37,10 @@ export default function LoginPage() {
 
   React.useEffect(() => {
     if (isAuthenticated && user) {
-      const roleStr = String((user as any).role || (user as any).role_name || "").toLowerCase();
-      if (roleStr.includes('platform admin') || roleStr === 'super_admin' || roleStr === 'admin') {
+      const roleStr = String(user.role || (user as any).role_name || "").toLowerCase().trim();
+      if (roleStr.includes('platform') || roleStr === 'super_admin' || roleStr === 'admin' || roleStr === 'platform_admin') {
         router.push("/admin");
-      } else if (roleStr.includes('institution admin') || roleStr.includes('school admin') || roleStr === 'school') {
+      } else if (roleStr.includes('institution') || roleStr.includes('school') || roleStr === 'school_admin') {
         router.push("/school");
       } else if (roleStr.includes('teacher') || roleStr.includes('staff')) {
         router.push("/teacher");
@@ -69,28 +69,44 @@ export default function LoginPage() {
       const accessToken = data.data.accessToken;
       const refreshToken = data.data.refreshToken;
       
-      if (user.role_name && !user.role) user.role = user.role_name;
+      const roleStr = String(user.role || user.role_name || "").toLowerCase().trim();
+      let canonicalRole: "Platform Admin" | "Institution Admin" | "Teacher" | "Student" | "Parent" | "Therapist" = "Student";
+      if (roleStr.includes('platform') || roleStr === 'super_admin' || roleStr === 'admin' || roleStr === 'platform_admin') {
+        canonicalRole = "Platform Admin";
+      } else if (roleStr.includes('institution') || roleStr.includes('school') || roleStr === 'school_admin') {
+        canonicalRole = "Institution Admin";
+      } else if (roleStr.includes('teacher') || roleStr.includes('staff')) {
+        canonicalRole = "Teacher";
+      } else if (roleStr.includes('parent')) {
+        canonicalRole = "Parent";
+      } else if (roleStr.includes('therapist')) {
+        canonicalRole = "Therapist";
+      } else {
+        canonicalRole = "Student";
+      }
+
+      user.role = canonicalRole;
+      user.role_name = canonicalRole;
       if (user.first_name && !user.firstName) user.firstName = user.first_name;
       if (user.last_name !== undefined && user.lastName === undefined) user.lastName = user.last_name;
       if (user.institution_id && !user.institutionId) user.institutionId = user.institution_id;
       
       setAuth(user, accessToken, refreshToken);
-      toast.success("Welcome back!");
+      toast.success(`Welcome back, ${user.firstName || canonicalRole}!`);
       
       // Strict role-based routing
-      const roleStr = String(user.role || user.role_name || "").toLowerCase();
-      if (roleStr.includes('platform admin') || roleStr === 'super_admin' || roleStr === 'admin') {
+      if (canonicalRole === 'Platform Admin') {
         router.push("/admin");
-      } else if (roleStr.includes('institution admin') || roleStr.includes('school admin') || roleStr === 'school') {
+      } else if (canonicalRole === 'Institution Admin') {
         router.push("/school");
-      } else if (roleStr.includes('teacher') || roleStr.includes('staff')) {
+      } else if (canonicalRole === 'Teacher') {
         router.push("/teacher");
-      } else if (roleStr.includes('parent')) {
+      } else if (canonicalRole === 'Parent') {
         router.push("/parent");
-      } else if (roleStr.includes('therapist')) {
+      } else if (canonicalRole === 'Therapist') {
         router.push("/therapist");
       } else {
-        router.push("/dashboard"); // Student or default
+        router.push("/dashboard");
       }
     },
     onError: (error: any) => {
@@ -158,13 +174,14 @@ export default function LoginPage() {
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full" disabled={isPending}>
+              <Button type="submit" className="w-full font-bold" disabled={isPending}>
                 {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Sign In
               </Button>
             </form>
           </Form>
-          <div className="mt-6 text-center text-sm">
+
+          <div className="mt-5 text-center text-sm">
             Don't have an account?{" "}
             <Link href="/register" className="text-primary hover:underline font-medium">
               Sign up

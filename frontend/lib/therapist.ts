@@ -36,23 +36,23 @@ export function clampPercent(value: number) {
 }
 
 export function scoreTone(score: number) {
-  if (score >= 90) return "text-emerald-600 bg-emerald-500/10";
-  if (score >= 80) return "text-teal-600 bg-teal-500/10";
-  if (score >= 70) return "text-amber-600 bg-amber-500/10";
+  if (score >= 80) return "text-emerald-600 bg-emerald-500/10";
+  if (score >= 60) return "text-teal-600 bg-teal-500/10";
+  if (score >= 40) return "text-amber-600 bg-amber-500/10";
   return "text-rose-600 bg-rose-500/10";
 }
 
 export function behaviorTone(value: number) {
-  if (value >= 90) return "text-emerald-600 bg-emerald-500/10";
-  if (value >= 75) return "text-teal-600 bg-teal-500/10";
-  if (value >= 60) return "text-amber-600 bg-amber-500/10";
+  if (value >= 80) return "text-emerald-600 bg-emerald-500/10";
+  if (value >= 60) return "text-teal-600 bg-teal-500/10";
+  if (value >= 40) return "text-amber-600 bg-amber-500/10";
   return "text-rose-600 bg-rose-500/10";
 }
 
 export function learningLevel(score: number) {
-  if (score >= 90) return "Advanced";
-  if (score >= 80) return "Strong";
-  if (score >= 70) return "Developing";
+  if (score >= 80) return "Advanced";
+  if (score >= 60) return "Proficient";
+  if (score >= 40) return "Developing";
   return "Needs Support";
 }
 

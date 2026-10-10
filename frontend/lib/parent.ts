@@ -51,17 +51,17 @@ export function formatDateValue(value?: string | null, pattern = "MMM d, yyyy"):
 
 export function scoreTone(score?: number | null): string {
   if (score === null || score === undefined) return "neutral";
-  if (score >= 90) return "excellent";
-  if (score >= 80) return "strong";
-  if (score >= 70) return "steady";
+  if (score >= 80) return "excellent";
+  if (score >= 60) return "strong";
+  if (score >= 40) return "steady";
   return "needs-attention";
 }
 
 export function learningLevel(score?: number | null): string {
   if (score === null || score === undefined) return "Emerging";
-  if (score >= 90) return "Advanced";
-  if (score >= 80) return "On Track";
-  if (score >= 70) return "Developing";
+  if (score >= 80) return "Advanced";
+  if (score >= 60) return "Proficient";
+  if (score >= 40) return "Developing";
   return "Needs Support";
 }
 

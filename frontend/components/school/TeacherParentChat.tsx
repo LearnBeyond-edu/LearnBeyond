@@ -87,16 +87,16 @@ export function TeacherParentChat() {
        }
     }
 
+    // 1. Add parents of students in teacher's assigned classes
     myStudents.forEach(student => {
       const parentProfile = allParents.find(p => p.student_id === student.id || p.student_id === student.user_id);
       
       if (parentProfile) {
-        const threadId = `parent_${parentProfile.id}_child_${student.id}`;
+        const threadId = `parent_${parentProfile.id || parentProfile.user_id}_child_${student.id}`;
         let threadToPush: ChatThread;
         
         if (existingThreads[threadId]) {
           threadToPush = existingThreads[threadId];
-          // Always ensure the latest parent name is used just in case
           threadToPush.name = [parentProfile.first_name, parentProfile.last_name].filter(Boolean).join(" ") || "Parent";
           threadToPush.studentName = [student.first_name, student.last_name].filter(Boolean).join(" ");
         } else {
@@ -116,14 +116,42 @@ export function TeacherParentChat() {
       }
     });
 
-    // Also include ANY threads that parents have initiated, even if DB relations are missing
+    // 2. Add ALL school parents so teacher can always communicate with any parent in the school
+    allParents.forEach(parentProfile => {
+      const student = allStudents.find(s => s.id === parentProfile.student_id || s.user_id === parentProfile.student_id);
+      const parentName = [parentProfile.first_name, parentProfile.last_name].filter(Boolean).join(" ") || "Parent";
+      const studentName = student ? [student.first_name, student.last_name].filter(Boolean).join(" ") : "Student";
+      const threadId = `parent_${parentProfile.id || parentProfile.user_id}_child_${student?.id || 'general'}`;
+
+      if (!generatedThreads.find(g => g.id === threadId)) {
+        if (existingThreads[threadId]) {
+          const t = existingThreads[threadId];
+          t.name = parentName;
+          t.studentName = studentName;
+          generatedThreads.push(t);
+        } else {
+          generatedThreads.push({
+            id: threadId,
+            name: parentName,
+            studentName: studentName,
+            role: "Parent",
+            lastMessage: "No messages yet.",
+            timestamp: new Date(),
+            unread: false,
+            messages: []
+          });
+        }
+      }
+    });
+
+    // 3. Also include ANY threads that parents have initiated, even if DB relations are missing
     parentMessagesMap.forEach((parentThread, parentUserId) => {
-      const parentProfile = allParents.find(p => p.user_id === parentUserId);
+      const parentProfile = allParents.find(p => p.user_id === parentUserId || p.id === parentUserId);
       const studentMatch = parentThread.id.match(/child_([a-zA-Z0-9-]+)/);
       const childId = studentMatch ? studentMatch[1] : null;
-      const student = allStudents.find(s => s.id === childId);
+      const student = allStudents.find(s => s.id === childId || s.user_id === childId);
       
-      const threadId = `parent_${parentProfile?.id || parentUserId}_child_${childId || 'unknown'}`;
+      const threadId = `parent_${parentProfile?.id || parentUserId}_child_${childId || 'general'}`;
       
       let threadToPush = generatedThreads.find(t => t.id === threadId);
       if (!threadToPush) {
@@ -132,8 +160,8 @@ export function TeacherParentChat() {
         } else {
           threadToPush = {
             id: threadId,
-            name: parentProfile ? [parentProfile.first_name, parentProfile.last_name].filter(Boolean).join(" ") : parentThread.name || "Unknown Parent",
-            studentName: student ? [student.first_name, student.last_name].filter(Boolean).join(" ") : parentThread.studentName || "Unknown Student",
+            name: parentProfile ? [parentProfile.first_name, parentProfile.last_name].filter(Boolean).join(" ") : parentThread.name || "Parent",
+            studentName: student ? [student.first_name, student.last_name].filter(Boolean).join(" ") : parentThread.studentName || "Student",
             role: "Parent",
             lastMessage: "No messages yet.",
             timestamp: new Date(),

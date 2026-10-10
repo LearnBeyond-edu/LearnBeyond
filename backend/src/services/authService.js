@@ -20,9 +20,13 @@ class AuthService {
     let roleName = null;
 
     if (!role_id && role) {
-      const res = await client.query('SELECT id FROM roles WHERE role_name = $1', [role]);
-      if (res.rows.length > 0) role_id = res.rows[0].id;
-      roleName = role;
+      let queryRole = role;
+      if (role.toLowerCase() === 'staff') queryRole = 'Teacher';
+      const res = await client.query('SELECT id, role_name FROM roles WHERE LOWER(role_name) = LOWER($1)', [queryRole]);
+      if (res.rows.length > 0) {
+        role_id = res.rows[0].id;
+        roleName = res.rows[0].role_name;
+      }
     } else if (role_id) {
       roleName = await userRepository.getRoleNameById(role_id);
     }
@@ -76,7 +80,40 @@ class AuthService {
   }
 
   async login(email, password) {
-    const user = await userRepository.findByEmail(email);
+    if (!email || !password) {
+      throw new ApiError(400, 'Email and password are required');
+    }
+
+    let user = await userRepository.findByEmail(email);
+    
+    // If not found in users table, check if it matches an institution contact email
+    if (!user) {
+      const { query } = require('../config/db');
+      const instRes = await query(
+        `SELECT * FROM institutions WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL LIMIT 1`,
+        [email.trim()]
+      );
+      if (instRes.rows.length > 0) {
+        const inst = instRes.rows[0];
+        const roleRes = await query(`SELECT id FROM roles WHERE role_name = 'Institution Admin'`);
+        if (roleRes.rows.length > 0) {
+          try {
+            user = await this.registerUser({
+              email: inst.email,
+              password: password,
+              role_id: roleRes.rows[0].id,
+              first_name: inst.name || 'School',
+              last_name: 'Admin',
+              institution_id: inst.id
+            });
+            user.role_name = 'Institution Admin';
+          } catch (e) {
+            user = await userRepository.findByEmail(inst.email);
+          }
+        }
+      }
+    }
+
     if (!user) {
       throw new ApiError(401, 'Invalid credentials');
     }

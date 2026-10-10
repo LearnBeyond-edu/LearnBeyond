@@ -33,9 +33,13 @@ export default function ParentChildrenPage() {
     return students
       .filter((child) => getDisplayName(child).toLowerCase().includes(query.toLowerCase()))
       .map((child) => {
-        const childProgress = progress.filter((entry) => entry.student_id === child.id);
-        const childAttendance = attendance.filter((entry) => entry.student_id === child.id);
-        const childSubmissions = submissions.filter((entry) => entry.student_id === child.id);
+        const childProgress = progress.filter((entry) => entry.student_id === child.id || (child.user_id && entry.student_id === child.user_id));
+        const childAttendance = attendance.filter((entry) => entry.student_id === child.id || (child.user_id && entry.student_id === child.user_id));
+        const childSubmissions = submissions.filter((entry) => 
+          entry.student_id === child.id || 
+          (child.user_id && entry.student_id === child.user_id) ||
+          (child.first_name && entry.student_name && entry.student_name.toLowerCase().includes(child.first_name.toLowerCase()))
+        );
 
         const classIds = new Map<string, number>();
         childAttendance.forEach((record) => classIds.set(record.class_id, (classIds.get(record.class_id) ?? 0) + 1));
@@ -45,11 +49,15 @@ export default function ParentChildrenPage() {
         const childAssignments = assignments.filter((assignment) => assignment.class_id === primaryClassId || childSubmissions.some((s) => s.assignment_id === assignment.id || (s as any).assessment_id === assignment.id));
         const childQuizzes = quizzes.filter((quiz) => quiz.class_id === primaryClassId || childSubmissions.some((s) => s.quiz_id === quiz.id || (s as any).assessment_id === quiz.id));
 
-        const score = average(childProgress.map((entry) => entry.score));
+        const allScores = [
+          ...childProgress.map((entry) => (entry as any).completion_percentage ?? entry.score ?? 100),
+          ...childSubmissions.filter(s => s.score !== null && s.score !== undefined).map(s => s.score)
+        ];
+        const score = allScores.length > 0 ? average(allScores) : 0;
         const attendanceRate = childAttendance.length ? Math.round((childAttendance.filter((entry) => entry.status === "present").length / childAttendance.length) * 100) : 0;
         
-        const finishedAssignments = childAssignments.filter(a => childSubmissions.some(s => (s.assignment_id === a.id || (s as any).assessment_id === a.id) && s.status === 'graded')).length;
-        const finishedQuizzes = childQuizzes.filter(q => childSubmissions.some(s => (s.quiz_id === q.id || (s as any).assessment_id === q.id) && s.status === 'graded')).length;
+        const finishedAssignments = childAssignments.filter(a => childSubmissions.some(s => (s.assignment_id === a.id || (s as any).assessment_id === a.id) && (s.status === 'graded' || s.status === 'submitted'))).length;
+        const finishedQuizzes = childQuizzes.filter(q => childSubmissions.some(s => (s.quiz_id === q.id || (s as any).assessment_id === q.id) && (s.status === 'graded' || s.status === 'submitted'))).length;
 
         return {
           ...child,

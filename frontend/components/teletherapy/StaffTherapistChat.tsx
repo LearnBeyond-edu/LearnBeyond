@@ -21,21 +21,22 @@ export function StaffTherapistChat({ defaultRecipient = "Dr. Therapist" }: { def
   const otherName = isTeacher ? "Dr. Therapist" : "Mr. Smith (Teacher)";
 
   const [threads, setThreads] = useState<any[]>([]);
+  const storageKey = `staff-therapist-chat-log-${user?.institutionId || user?.id || 'default'}`;
 
   useEffect(() => {
     const loadChat = () => {
-      const saved = safeReadLocalStorage<any[] | null>("staff-therapist-chat-log", null);
+      const saved = safeReadLocalStorage<any[] | null>(storageKey, null);
       if (saved && saved.length > 0) {
         setThreads(saved);
       } else {
         setThreads([
           {
             id: 0,
-            studentName: "General Discussion",
+            studentName: "Clinical Case Discussion",
             recipient: otherName,
             lastActive: new Date().toISOString(),
             messages: [
-              { sender: "System", text: "Secure clinical discussion channel created.", time: format(new Date(), "hh:mm a") }
+              { sender: "System", text: "Secure clinical discussion channel created for your school.", time: format(new Date(), "hh:mm a") }
             ]
           }
         ]);
@@ -45,7 +46,7 @@ export function StaffTherapistChat({ defaultRecipient = "Dr. Therapist" }: { def
     loadChat();
     window.addEventListener("storage", loadChat);
     return () => window.removeEventListener("storage", loadChat);
-  }, []);
+  }, [storageKey, otherName]);
 
   const handleSend = () => {
     if (!message.trim() || !threads.length) return;
@@ -59,7 +60,7 @@ export function StaffTherapistChat({ defaultRecipient = "Dr. Therapist" }: { def
     newThreads[activeThread].lastActive = new Date().toISOString();
     
     setThreads(newThreads);
-    safeWriteLocalStorage("staff-therapist-chat-log", newThreads);
+    safeWriteLocalStorage(storageKey, newThreads);
     window.dispatchEvent(new Event("storage"));
     
     setMessage("");
@@ -78,7 +79,7 @@ export function StaffTherapistChat({ defaultRecipient = "Dr. Therapist" }: { def
     newThreads[activeThread].lastActive = new Date().toISOString();
     
     setThreads(newThreads);
-    safeWriteLocalStorage("staff-therapist-chat-log", newThreads);
+    safeWriteLocalStorage(storageKey, newThreads);
     window.dispatchEvent(new Event("storage"));
     
     // Reset input

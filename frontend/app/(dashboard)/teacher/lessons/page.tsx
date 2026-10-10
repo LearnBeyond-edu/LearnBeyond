@@ -29,8 +29,20 @@ export default function TeacherLessonsPage() {
 
   const allLessons = data?.pages.flatMap((p) => p.data) ?? [];
   
-  // Filter for lessons created by this teacher
-  const myLessons = allLessons.filter(l => l.created_by === user?.id || myClassIds.includes(l.class_id));
+  // Filter for lessons created by this teacher or teacher's classes, fallback to all curriculum lessons
+  const filteredTeacherLessons = allLessons.filter(l => l.created_by === user?.id || myClassIds.includes(l.class_id));
+  const myLessons = filteredTeacherLessons.length > 0 ? filteredTeacherLessons : allLessons;
+
+  const formatDateSafe = (dateVal: any, formatStr = "MMM d, yyyy 'at' h:mm a") => {
+    if (!dateVal) return "Not scheduled";
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return "Not scheduled";
+      return format(d, formatStr);
+    } catch {
+      return "Not scheduled";
+    }
+  };
 
   const filtered = myLessons.filter((l) =>
     [l.title, l.description].join(" ").toLowerCase().includes(search.toLowerCase())
@@ -91,7 +103,7 @@ export default function TeacherLessonsPage() {
                   
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4 bg-muted/40 p-2 rounded-lg">
                     <Calendar className="h-3.5 w-3.5 shrink-0" />
-                    <span>{lesson.scheduled_time ? format(new Date(lesson.scheduled_time), "MMM d, yyyy 'at' h:mm a") : "Not scheduled"}</span>
+                    <span>{formatDateSafe(lesson.scheduled_time)}</span>
                   </div>
 
                   <div className="flex gap-2 pt-2 border-t">

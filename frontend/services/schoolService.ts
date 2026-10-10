@@ -197,12 +197,12 @@ export const lessonService = {
   getAll: async (limit = 50, cursor?: string): Promise<CursorResponse<Lesson>> => {
     try {
       const res = await api.get<ApiResponse<Lesson[]>>('/lessons', { params: { limit, ...(cursor ? { cursor } : {}) } });
-      if (res.data.data && res.data.data.length > 0) {
-        return { data: res.data.data, meta: res.data.meta as any };
+      if (res.data && Array.isArray(res.data.data)) {
+        return { data: res.data.data, meta: (res.data.meta as any) || { hasNextPage: false, nextCursor: null } };
       }
-      return { data: defaultLessons, meta: { hasNextPage: false, nextCursor: null } };
+      return { data: [], meta: { hasNextPage: false, nextCursor: null } };
     } catch {
-      return { data: defaultLessons, meta: { hasNextPage: false, nextCursor: null } };
+      return { data: [], meta: { hasNextPage: false, nextCursor: null } };
     }
   },
   getOne: async (id: string): Promise<Lesson> => {
@@ -464,18 +464,12 @@ export const assignmentService = {
   getAll: async (limit = 50, cursor?: string): Promise<CursorResponse<Assignment>> => {
     try {
       const res = await api.get<ApiResponse<Assignment[]>>('/assignments', { params: { limit, ...(cursor ? { cursor } : {}) } });
-      if (res.data.data && res.data.data.length > 0) {
-        return { data: res.data.data, meta: res.data.meta as any };
+      if (res.data && Array.isArray(res.data.data)) {
+        return { data: res.data.data, meta: (res.data.meta as any) || { hasNextPage: false, nextCursor: null } };
       }
-      return {
-        data: defaultAssignments,
-        meta: { hasNextPage: false, nextCursor: null }
-      };
+      return { data: [], meta: { hasNextPage: false, nextCursor: null } };
     } catch {
-      return {
-        data: defaultAssignments,
-        meta: { hasNextPage: false, nextCursor: null }
-      };
+      return { data: [], meta: { hasNextPage: false, nextCursor: null } };
     }
   },
   getOne: async (id: string): Promise<Assignment> => {
@@ -521,17 +515,14 @@ const defaultProgress: Progress[] = [
 ];
 
 function getStoredProgress(): Progress[] {
-  if (typeof window === 'undefined') return defaultProgress;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(PROGRESS_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(defaultProgress));
-      return defaultProgress;
-    }
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : defaultProgress;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return defaultProgress;
+    return [];
   }
 }
 
@@ -544,20 +535,19 @@ function saveStoredProgress(items: Progress[]) {
 
 export const progressService = {
   getAll: async (limit = 100, cursor?: string, filters?: Record<string, any>): Promise<CursorResponse<Progress>> => {
-    let list = getStoredProgress();
     try {
       const res = await api.get<ApiResponse<Progress[]>>('/progress', { 
         params: { limit, ...(cursor ? { cursor } : {}), ...filters } 
       });
-      if (res.data.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
-        const apiIds = new Set(res.data.data.map(d => d.id));
-        list = [...res.data.data, ...list.filter(d => !apiIds.has(d.id))];
+      if (res.data && Array.isArray(res.data.data)) {
+        return { data: res.data.data, meta: (res.data.meta as any) || { hasNextPage: false, nextCursor: null } };
       }
     } catch {}
 
+    let list = getStoredProgress();
     if (filters) {
       if (filters.student_id) {
-        list = list.filter(p => p.student_id === filters.student_id || filters.student_id === 'amvp26124' || p.student_id === 's-1');
+        list = list.filter(p => p.student_id === filters.student_id);
       }
       if (filters.lesson_id) {
         list = list.filter(p => p.lesson_id === filters.lesson_id);
@@ -608,12 +598,12 @@ export const quizService = {
   getAll: async (limit = 50, cursor?: string): Promise<CursorResponse<Quiz>> => {
     try {
       const res = await api.get<ApiResponse<Quiz[]>>('/quizzes', { params: { limit, ...(cursor ? { cursor } : {}) } });
-      if (res.data.data && res.data.data.length > 0) {
-        return { data: res.data.data, meta: res.data.meta as any };
+      if (res.data && Array.isArray(res.data.data)) {
+        return { data: res.data.data, meta: (res.data.meta as any) || { hasNextPage: false, nextCursor: null } };
       }
-      return { data: defaultQuizzes, meta: { hasNextPage: false, nextCursor: null } };
+      return { data: [], meta: { hasNextPage: false, nextCursor: null } };
     } catch {
-      return { data: defaultQuizzes, meta: { hasNextPage: false, nextCursor: null } };
+      return { data: [], meta: { hasNextPage: false, nextCursor: null } };
     }
   },
   getOne: async (id: string): Promise<Quiz> => {
@@ -687,17 +677,14 @@ const defaultSubmissions: Submission[] = [
 ];
 
 function getStoredSubmissions(): Submission[] {
-  if (typeof window === 'undefined') return defaultSubmissions;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(SUBMISSIONS_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(SUBMISSIONS_STORAGE_KEY, JSON.stringify(defaultSubmissions));
-      return defaultSubmissions;
-    }
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : defaultSubmissions;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return defaultSubmissions;
+    return [];
   }
 }
 
@@ -715,44 +702,41 @@ export const submissionService = {
       const res = await api.get<ApiResponse<Submission[]>>('/submissions', { 
         params: { limit, ...(cursor ? { cursor } : {}), ...filters } 
       });
-      if (res.data.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
-        const apiIds = new Set(res.data.data.map(d => d.id));
-        list = [...res.data.data, ...list.filter(d => !apiIds.has(d.id))];
+      if (res.data && Array.isArray(res.data.data)) {
+        const backendList = res.data.data;
+        const merged = [...backendList];
+        list.forEach(ls => {
+          if (!merged.some(m => m.id === ls.id || (m.assessment_id === ls.assessment_id && m.student_id === ls.student_id))) {
+            merged.push(ls);
+          }
+        });
+        list = merged;
       }
     } catch {}
 
     if (filters) {
       if (filters.quiz_id) {
-        const matches = list.filter(s => 
+        list = list.filter(s => 
           s.quiz_id === filters.quiz_id || 
-          s.assessment_id === filters.quiz_id || 
-          (s.assessment_type === 'quiz' && (s.assessment_id === filters.quiz_id || s.quiz_id === filters.quiz_id))
+          s.assessment_id === filters.quiz_id
         );
-        list = matches.length > 0 ? matches : list.filter(s => s.assessment_type === 'quiz' || s.quiz_id);
       }
       if (filters.assignment_id) {
-        const matches = list.filter(s => 
+        list = list.filter(s => 
           s.assignment_id === filters.assignment_id || 
-          s.assessment_id === filters.assignment_id || 
-          (s.assessment_type === 'assignment' && (s.assessment_id === filters.assignment_id || s.assignment_id === filters.assignment_id))
+          s.assessment_id === filters.assignment_id
         );
-        list = matches.length > 0 ? matches : list.filter(s => s.assessment_type === 'assignment' || s.assignment_id);
       }
       if (filters.assessment_id) {
-        const matches = list.filter(s => 
+        list = list.filter(s => 
           s.assessment_id === filters.assessment_id || 
           s.quiz_id === filters.assessment_id || 
           s.assignment_id === filters.assessment_id || 
           s.lesson_id === filters.assessment_id
         );
-        list = matches.length > 0 ? matches : list;
       }
       if (filters.student_id) {
-        list = list.filter(s => 
-          s.student_id === filters.student_id || 
-          filters.student_id === 'amvp26124' || 
-          s.student_id === 's-1'
-        );
+        list = list.filter(s => s.student_id === filters.student_id);
       }
     }
 
@@ -770,26 +754,33 @@ export const submissionService = {
     }
   },
   create: async (payload: any): Promise<Submission> => {
+    const current = getStoredSubmissions();
+    const targetAssessmentId = payload.assessment_id || payload.quiz_id || payload.assignment_id || payload.lesson_id;
+    const existing = current.find(s => 
+      (s.assessment_id === targetAssessmentId || s.quiz_id === targetAssessmentId || s.assignment_id === targetAssessmentId) &&
+      (s.student_id === payload.student_id || (payload.student_name && s.student_name?.toLowerCase().includes(payload.student_name.toLowerCase())))
+    );
+
     const newSub: Submission = {
-      id: payload.id || `sub-${Date.now()}`,
-      student_id: payload.student_id || "s-1",
-      student_name: payload.student_name || "Alex Johnson",
+      id: existing?.id || payload.id || `sub-${Date.now()}`,
+      student_id: payload.student_id || existing?.student_id || "s-1",
+      student_name: payload.student_name || existing?.student_name || "Alex Johnson",
       assessment_type: payload.assessment_type || (payload.quiz_id ? "quiz" : payload.lesson_id ? "lesson" : "assignment"),
-      assessment_id: payload.assessment_id || payload.quiz_id || payload.assignment_id || payload.lesson_id,
-      quiz_id: payload.quiz_id || (payload.assessment_type === "quiz" ? payload.assessment_id : undefined),
-      assignment_id: payload.assignment_id || (payload.assessment_type === "assignment" ? payload.assessment_id : undefined),
-      lesson_id: payload.lesson_id || (payload.assessment_type === "lesson" ? payload.assessment_id : undefined),
-      score: payload.score ?? null,
-      status: payload.status || "submitted",
-      answers: payload.answers || null,
-      content: payload.content || null,
-      files: payload.files || [],
-      feedback: payload.feedback || null,
-      created_at: payload.created_at || new Date().toISOString(),
+      assessment_id: targetAssessmentId,
+      quiz_id: payload.quiz_id || (payload.assessment_type === "quiz" ? targetAssessmentId : undefined),
+      assignment_id: payload.assignment_id || (payload.assessment_type === "assignment" ? targetAssessmentId : undefined),
+      lesson_id: payload.lesson_id || (payload.assessment_type === "lesson" ? targetAssessmentId : undefined),
+      // Keep the first attempt's score & feedback for evaluation if already attempted
+      score: existing?.score !== null && existing?.score !== undefined ? existing.score : (payload.score ?? null),
+      status: existing?.status || payload.status || "submitted",
+      answers: payload.answers || existing?.answers || null,
+      content: payload.content || existing?.content || null,
+      files: payload.files || existing?.files || [],
+      feedback: existing?.feedback || payload.feedback || null,
+      created_at: existing?.created_at || payload.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
-    const current = getStoredSubmissions();
     const updated = [newSub, ...current.filter(s => s.id !== newSub.id)];
     saveStoredSubmissions(updated);
 

@@ -5,6 +5,7 @@ import { TopNav } from "@/components/layout/TopNav";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AuthGuard } from "@/components/AuthGuard";
 
+import { AnnouncementPopup } from "@/components/layout/AnnouncementPopup";
 import { usePathname } from "next/navigation";
 
 export default function DashboardLayout({
@@ -19,11 +20,17 @@ export default function DashboardLayout({
   const hasCustomLayout = customLayoutRoots.some(root => pathname?.startsWith(root));
 
   if (hasCustomLayout) {
-    return <AuthGuard>{children}</AuthGuard>;
+    return (
+      <AuthGuard>
+        <AnnouncementPopup />
+        {children}
+      </AuthGuard>
+    );
   }
 
   return (
     <AuthGuard>
+      <AnnouncementPopup />
       <SidebarProvider>
         <div className="flex min-h-screen w-full bg-background relative overflow-hidden">
           {/* Subtle High-End Background Orbs */}

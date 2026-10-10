@@ -39,8 +39,13 @@ export default function QuizAttemptPage() {
   const authUser = useAuthStore((state) => state.user);
   const createSubmission = useCreateSubmission();
   
-  const { data: submissionsData } = useSubmissions({ assessment_id: quizId });
-  const isCompleted = (submissionsData?.pages?.flatMap(p => p.data) || []).length > 0;
+  const { data: submissionsData } = useSubmissions({}, 100);
+  const allSubmissions = submissionsData?.pages?.flatMap(p => p.data) || [];
+  const existingSubmission = allSubmissions.find(s => 
+    (s.quiz_id === quizId || s.assessment_id === quizId) && 
+    (s.student_id === authUser?.id || (authUser?.firstName && s.student_name?.toLowerCase().includes(authUser.firstName.toLowerCase())))
+  );
+  const isCompleted = !!existingSubmission;
 
   const [activeScreen, setActiveScreen] = useState<"intro" | "questions" | "results" | "review">("intro");
   
@@ -226,7 +231,7 @@ export default function QuizAttemptPage() {
         });
       }
     } else {
-      toast.info("Reattempt completed. Your original score was kept.");
+      toast.info(`Practice attempt complete (${finalScorePercent}%). Your original first attempt score (${existingSubmission?.score ?? 100}%) is considered for evaluation and display to parents and staff.`);
     }
 
     // Confetti on success
@@ -234,7 +239,7 @@ export default function QuizAttemptPage() {
       triggerConfetti();
     }
 
-    toast.success(`Quiz submitted! Earned ${earnedMarks}/${totalMarks} marks`);
+    toast.success(`Quiz completed! Current score: ${finalScorePercent}% (${earnedMarks}/${totalMarks} marks)`);
   };
 
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -306,12 +311,17 @@ export default function QuizAttemptPage() {
                 </div>
               </div>
               {isCompleted && (
-                <div className="bg-emerald-500/10 text-emerald-600 p-3 rounded-xl text-sm font-bold flex items-center gap-2 justify-center max-w-sm mx-auto">
-                  <CheckCircle className="w-5 h-5" /> You've already completed this quiz.
+                <div className="bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 p-4 rounded-2xl text-xs font-medium space-y-1.5 max-w-md mx-auto text-left">
+                  <div className="flex items-center gap-2 font-bold text-sm text-amber-800 dark:text-amber-300">
+                    <CheckCircle className="w-4 h-4 text-amber-600" /> Already Attempted (First Score: {existingSubmission?.score ?? 100}%)
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">
+                    You have already attempted this quiz. You can try again to practice, but your first attempt is considered for evaluation and display to parents and staff.
+                  </p>
                 </div>
               )}
               <Button size="lg" onClick={handleStartQuiz} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl px-12 h-14 text-sm font-bold shadow-lg shadow-indigo-500/20 transition-all hover:scale-105">
-                {isCompleted ? "Reattempt Assessment" : "Start Assessment Now"}
+                {isCompleted ? "Try Again (Practice Mode)" : "Start Assessment Now"}
               </Button>
             </CardContent>
           </Card>

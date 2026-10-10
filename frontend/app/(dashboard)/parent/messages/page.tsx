@@ -140,6 +140,34 @@ export default function ParentMessagesPage() {
       }
     });
 
+    // Also include all school teachers so parents can easily contact any staff member
+    allTeachers.forEach(teacher => {
+      const child = myChildren[0];
+      const teacherName = [teacher.first_name, teacher.last_name].filter(Boolean).join(" ") || "Teacher";
+      const studentName = child ? [child.first_name, child.last_name].filter(Boolean).join(" ") : "Your Child";
+      const threadId = `teacher_${teacher.user_id || teacher.id}_child_${child?.id || 'general'}`;
+
+      if (!generatedThreads.find(g => g.id.startsWith(`teacher_${teacher.user_id || teacher.id}`))) {
+        if (existingThreads[threadId]) {
+          const t = existingThreads[threadId];
+          t.name = teacherName;
+          t.studentName = studentName;
+          generatedThreads.push(t);
+        } else {
+          generatedThreads.push({
+            id: threadId,
+            name: teacherName,
+            studentName: studentName,
+            role: "Teacher",
+            lastMessage: "No messages yet.",
+            timestamp: new Date(),
+            unread: false,
+            messages: []
+          });
+        }
+      }
+    });
+
     // If teacher didn't match any child class (e.g. they sent us a message anyway), push them too!
     teacherMessagesMap.forEach((threadFromTeacher, teacherUserId) => {
        const teacher = allTeachers.find(t => t.user_id === teacherUserId);
@@ -183,9 +211,20 @@ export default function ParentMessagesPage() {
        generatedThreads.push(threadToPush);
     });
 
-    if (generatedThreads.length > 0) {
-      setThreads(generatedThreads.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()));
-      if (!activeThreadId) setActiveThreadId(generatedThreads[0].id);
+    // Deduplicate by staff/teacher name so no staff member appears twice in the chat sidebar
+    const uniqueThreadsMap = new Map<string, ChatThread>();
+    generatedThreads.forEach(t => {
+       const key = t.name.trim().toLowerCase();
+       const existing = uniqueThreadsMap.get(key);
+       if (!existing || t.messages.length > existing.messages.length) {
+           uniqueThreadsMap.set(key, t);
+       }
+    });
+    const finalThreads = Array.from(uniqueThreadsMap.values());
+
+    if (finalThreads.length > 0) {
+      setThreads(finalThreads.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()));
+      if (!activeThreadId) setActiveThreadId(finalThreads[0].id);
     } else {
       setThreads([]);
       setActiveThreadId("");

@@ -62,16 +62,40 @@ export default function ParentDashboard() {
   }, [children, selectedChildId]);
 
   const selectedChild = children.find((child) => child.id === selectedChildId) ?? children[0];
-  const childProgress = selectedChild ? progressRecords.filter((entry) => entry.student_id === selectedChild.id) : progressRecords;
-  const childSubmissions = selectedChild ? submissions.filter((entry) => entry.student_id === selectedChild.id) : submissions;
-  const childAssignments = assignments.filter((assignment) => childSubmissions.some((submission) => submission.assignment_id === assignment.id));
-  const childQuizzes = quizzes.filter((quiz) => childSubmissions.some((submission) => submission.quiz_id === quiz.id));
+  const childProgress = selectedChild ? progressRecords.filter((entry) => 
+    entry.student_id === selectedChild.id || 
+    (selectedChild.user_id && entry.student_id === selectedChild.user_id) ||
+    (selectedChild.first_name && (entry as any).student_name && (entry as any).student_name.toLowerCase().includes(selectedChild.first_name.toLowerCase()))
+  ) : progressRecords;
+  const childSubmissions = selectedChild ? submissions.filter((entry) => 
+    entry.student_id === selectedChild.id || 
+    (selectedChild.user_id && entry.student_id === selectedChild.user_id) ||
+    (selectedChild.first_name && entry.student_name && entry.student_name.toLowerCase().includes(selectedChild.first_name.toLowerCase()))
+  ) : submissions;
+  const childAssignments = assignments.filter((assignment) => childSubmissions.some((submission) => submission.assignment_id === assignment.id || (submission as any).assessment_id === assignment.id));
+  const childQuizzes = quizzes.filter((quiz) => childSubmissions.some((submission) => submission.quiz_id === quiz.id || (submission as any).assessment_id === quiz.id));
 
-  const avgProgress = average(childProgress.map((entry) => (entry as any).completion_percentage ?? 100));
+  const allScores = [
+    ...childProgress.map((entry) => (entry as any).completion_percentage ?? (entry as any).score ?? 100),
+    ...childSubmissions.filter((s) => s.score !== null && s.score !== undefined).map((s) => s.score as number)
+  ];
+  const avgProgress = allScores.length > 0 ? average(allScores) : 0;
   const completedLessons = new Set(childProgress.map((entry) => entry.lesson_id)).size;
-  const upcomingAssignments = assignments.filter((assignment) => !assignment.due_date || new Date(assignment.due_date) >= new Date()).slice(0, 4);
-  const upcomingQuizzes = quizzes.filter((quiz) => !quiz.due_date || new Date(quiz.due_date) >= new Date()).slice(0, 4);
-  const recentGrades = [...childProgress].sort((a, b) => new Date((b as any).updated_at).getTime() - new Date((a as any).updated_at).getTime()).slice(0, 6);
+  const upcomingAssignments = assignments.filter((assignment) => {
+    if (!assignment.due_date) return true;
+    const d = new Date(assignment.due_date);
+    return !isNaN(d.getTime()) && d >= new Date();
+  }).slice(0, 4);
+  const upcomingQuizzes = quizzes.filter((quiz) => {
+    if (!quiz.due_date) return true;
+    const d = new Date(quiz.due_date);
+    return !isNaN(d.getTime()) && d >= new Date();
+  }).slice(0, 4);
+  const recentGrades = [...childProgress].sort((a, b) => {
+    const tB = new Date((b as any).updated_at || 0).getTime() || 0;
+    const tA = new Date((a as any).updated_at || 0).getTime() || 0;
+    return tB - tA;
+  }).slice(0, 6);
   const teacherMessages = notifications.filter((notification) => /teacher|class|lesson|quiz|assignment|progress/i.test(`${notification.title} ${notification.message}`)).slice(0, 4);
   const schoolAnnouncements = notifications.filter((notification) => /school|holiday|conference|report|event|announcement/i.test(`${notification.title} ${notification.message}`)).slice(0, 4);
 
@@ -80,7 +104,13 @@ export default function ParentDashboard() {
       const day = new Date();
       day.setDate(day.getDate() - (6 - index));
       const dayKey = format(day, "yyyy-MM-dd");
-      const dayProgress = childProgress.filter((entry) => format(new Date((entry as any).updated_at), "yyyy-MM-dd") === dayKey).map((entry) => (entry as any).completion_percentage ?? 100);
+      const dayProgress = childProgress.filter((entry) => {
+        try {
+          return format(new Date((entry as any).updated_at), "yyyy-MM-dd") === dayKey;
+        } catch {
+          return false;
+        }
+      }).map((entry) => (entry as any).completion_percentage ?? 100);
       return {
         label: format(day, "EEE"),
         score: average(dayProgress),
@@ -88,15 +118,13 @@ export default function ParentDashboard() {
     });
   }, [childProgress]);
 
-  const activity = [
-    ...recentGrades.map((entry) => ({
-      id: entry.id,
-      icon: CheckCircle,
-      title: `${selectedChild ? getDisplayName(selectedChild) : "Child"} scored ${(entry as any).completion_percentage ?? 100}%`,
-      detail: lessons.find((lesson) => lesson.id === entry.lesson_id)?.title ?? "Completed a lesson",
-      time: formatDateValue((entry as any).updated_at, "MMM d, p"),
-    })),
-  ].sort((left, right) => new Date(right.time).getTime() - new Date(left.time).getTime()).slice(0, 8);
+  const activity = recentGrades.map((entry) => ({
+    id: entry.id,
+    icon: CheckCircle,
+    title: `${selectedChild ? getDisplayName(selectedChild) : "Child"} scored ${(entry as any).completion_percentage ?? 100}%`,
+    detail: lessons.find((lesson) => lesson.id === entry.lesson_id)?.title ?? "Completed a lesson",
+    time: formatDateValue((entry as any).updated_at, "MMM d, p"),
+  })).slice(0, 8);
 
   const stats = [
     { title: "Children enrolled", value: children.length, icon: <GraduationCap className="h-4 w-4" />, accentColor: "bg-rose-500/10 text-rose-600", loading: studentsLoading },

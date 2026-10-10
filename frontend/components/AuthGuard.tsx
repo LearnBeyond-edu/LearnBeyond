@@ -30,11 +30,30 @@ export function AuthGuard({ children, allowedRoles }: { children: React.ReactNod
 
     if (!isAuthenticated) {
       router.push(`/login?redirect=${pathname}`);
-    } else if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-      router.push("/unauthorized");
-    } else {
-      setIsChecking(false);
+      return;
     }
+
+    if (allowedRoles && user) {
+      const userRoleStr = String(user.role || (user as any).role_name || "").toLowerCase().trim();
+      const isAllowed = allowedRoles.some(allowed => {
+        const allowedLower = allowed.toLowerCase().trim();
+        if (allowedLower === userRoleStr) return true;
+        if (allowedLower === "platform admin" && (userRoleStr === "admin" || userRoleStr === "super_admin" || userRoleStr === "platform_admin" || userRoleStr.includes("platform admin") || userRoleStr.includes("platform"))) return true;
+        if (allowedLower === "institution admin" && (userRoleStr === "school" || userRoleStr === "school admin" || userRoleStr === "institution_admin" || userRoleStr.includes("institution admin"))) return true;
+        if (allowedLower === "teacher" && (userRoleStr.includes("teacher") || userRoleStr.includes("staff") || userRoleStr.includes("instructor"))) return true;
+        if (allowedLower === "parent" && userRoleStr.includes("parent")) return true;
+        if (allowedLower === "therapist" && userRoleStr.includes("therapist")) return true;
+        if (allowedLower === "student" && userRoleStr.includes("student")) return true;
+        return false;
+      });
+
+      if (!isAllowed) {
+        router.push("/unauthorized");
+        return;
+      }
+    }
+
+    setIsChecking(false);
   }, [isHydrated, isAuthenticated, user, router, pathname, allowedRoles]);
 
   if (!isHydrated || isChecking) {

@@ -34,6 +34,28 @@ export default function TeacherDashboard() {
   const { data: assignmentsData, isLoading: la } = useAssignments();
   const { data: lessonsData, isLoading: ll } = useLessons(50);
 
+  const formatTimeSafe = (dateVal: any, formatStr = "h:mm a") => {
+    if (!dateVal) return "TBD";
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return "TBD";
+      return format(d, formatStr);
+    } catch {
+      return "TBD";
+    }
+  };
+
+  const isTodaySafe = (dateVal: any) => {
+    if (!dateVal) return false;
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return false;
+      return isToday(d);
+    } catch {
+      return false;
+    }
+  };
+
   const allClasses = classesData?.pages.flatMap((p) => p.data) ?? [];
   const classes = allClasses;
   const students = studentsData?.pages.flatMap((p) => p.data) ?? [];
@@ -41,9 +63,17 @@ export default function TeacherDashboard() {
   const lessons = lessonsData?.pages.flatMap((p) => p.data) ?? [];
 
   // Filter lessons for today
-  const todaysLessons = lessons.filter(l => l.scheduled_time && isToday(new Date(l.scheduled_time)));
+  const todaysLessons = lessons.filter(l => isTodaySafe(l.scheduled_time));
 
-  const activeAssignments = assignments.filter(a => !a.due_date || new Date(a.due_date) >= new Date());
+  const activeAssignments = assignments.filter(a => {
+    if (!a.due_date) return true;
+    try {
+      const d = new Date(a.due_date);
+      return !isNaN(d.getTime()) && d >= new Date();
+    } catch {
+      return true;
+    }
+  });
 
   const stats = [
     { title: "My Classes", value: classes.length, icon: <BookOpen className="h-4 w-4" />, accentColor: "bg-blue-500/10 text-blue-600", loading: lc },
@@ -107,7 +137,7 @@ export default function TeacherDashboard() {
                     className="flex items-center gap-4 p-3 rounded-xl border bg-card hover:shadow-sm transition-shadow group cursor-pointer"
                   >
                     <div className="flex-shrink-0 w-16 text-center">
-                      <p className="text-sm font-bold text-primary">{format(new Date(lesson.scheduled_time!), "h:mm a")}</p>
+                      <p className="text-sm font-bold text-primary">{formatTimeSafe(lesson.scheduled_time)}</p>
                     </div>
                     <div className="w-px h-10 bg-border hidden sm:block"></div>
                     <div className="flex-1 min-w-0">

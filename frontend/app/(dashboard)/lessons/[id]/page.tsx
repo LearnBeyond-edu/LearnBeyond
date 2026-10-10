@@ -15,12 +15,1051 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { getAttachments, Attachment } from "@/lib/fileStorage";
 import {
   BookOpen, Sparkles, Pin, Highlighter, FileText, CheckCircle, ArrowLeft,
-  Volume2, Trash2, Edit2, Play, Pause, ChevronLeft, ChevronRight, PenTool,
+  Volume2, VolumeX, Trash2, Edit2, Play, Pause, ChevronLeft, ChevronRight, PenTool,
   Bookmark, Award, Save, RefreshCw, MessageSquare, AlertCircle, Video, Image as ImageIcon,
-  Settings, Maximize, ZoomOut, ZoomIn, Download, Loader2, Scan, Hand
+  Settings, Maximize, ZoomOut, ZoomIn, Download, Loader2, Scan, Hand,
+  Layers, Activity, Sliders, RotateCcw, Zap, Compass, ShieldCheck, Flame, Radio, Orbit, Atom, Check, Eye,
+  Sun, Globe, Moon, Lightbulb, Battery, Shield, Waves, Magnet, Droplets
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+
+// ==========================================
+// TACTILE TOUCH & FEEL PHYSICS SANDBOX (FLAWLESS & RESPONSIVE)
+// ==========================================
+interface TactilePhysicsSandboxProps {
+  config: any;
+  tactileItems: Record<string, boolean>;
+  setTactileItems: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  playTactileTone: (freq?: number, duration?: number) => void;
+  isCompleted: boolean;
+  handleCompleteLesson: () => void;
+}
+
+function TactilePhysicsSandbox({
+  config,
+  tactileItems,
+  setTactileItems,
+  playTactileTone,
+  isCompleted,
+  handleCompleteLesson
+}: TactilePhysicsSandboxProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const [tactileMode, setTactileMode] = useState<'gel' | 'fluid' | 'magnetic' | 'gravity'>('gel');
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [activeTouchHint, setActiveTouchHint] = useState<string>("Touch, squeeze & drag bodies into the glowing sockets!");
+
+  // Internal physical nodes state
+  const nodesRef = useRef<Array<{
+    id: string;
+    name: string;
+    role: string;
+    icon: string;
+    color: string;
+    colorHex: string;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    radius: number;
+    targetX: number;
+    targetY: number;
+    dockX: number;
+    dockY: number;
+    isDragging: boolean;
+    isPlaced: boolean;
+    squishX: number;
+    squishY: number;
+    orbitAngle: number;
+  }>>([]);
+
+  const ripplesRef = useRef<Array<{ x: number; y: number; r: number; maxR: number; alpha: number; color: string }>>([]);
+  const particlesRef = useRef<Array<{ x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string; size: number }>>([]);
+  const magneticSandRef = useRef<Array<{ x: number; y: number; vx: number; vy: number; origX: number; origY: number; color: string }>>([]);
+  const gelGridRef = useRef<Array<{ x: number; y: number; origX: number; origY: number; vx: number; vy: number }>>([]);
+  
+  const pointerRef = useRef<{ x: number; y: number; isDown: boolean; lastX: number; lastY: number; speed: number; activeNodeIdx: number }>({
+    x: -999,
+    y: -999,
+    isDown: false,
+    lastX: -999,
+    lastY: -999,
+    speed: 0,
+    activeNodeIdx: -1
+  });
+
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const triggerHapticAudio = (freq: number, duration = 0.12, type: OscillatorType = 'sine') => {
+    if (!soundEnabled || typeof window === 'undefined') return;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      gain.gain.setValueAtTime(0.07, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + duration);
+    } catch (e) {}
+  };
+
+  const getColorHex = (c: string) => {
+    switch (c) {
+      case 'amber': return '#f59e0b';
+      case 'blue': return '#3b82f6';
+      case 'teal': return '#14b8a6';
+      case 'red': return '#ef4444';
+      case 'purple': return '#a855f7';
+      case 'emerald': return '#10b981';
+      case 'indigo': return '#6366f1';
+      default: return '#06b6d4';
+    }
+  };
+
+  // Resize and position calculation
+  const updateDimensionsAndPositions = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(340, Math.floor(rect.width || 760));
+    const height = Math.max(280, Math.floor(rect.height || 380));
+
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+
+    const centerX = width / 2;
+    const centerY = height * 0.42;
+
+    let targets: Array<{ x: number; y: number }> = [];
+    if (config.conceptType === 'space') {
+      targets = [
+        { x: centerX, y: centerY },
+        { x: centerX + Math.min(130, width * 0.22), y: centerY },
+        { x: centerX + Math.min(200, width * 0.35), y: centerY }
+      ];
+    } else if (config.conceptType === 'biology') {
+      targets = [
+        { x: centerX, y: centerY },
+        { x: centerX - Math.min(110, width * 0.2), y: centerY + 25 },
+        { x: centerX + Math.min(90, width * 0.16), y: centerY - 20 }
+      ];
+    } else {
+      targets = [
+        { x: centerX - Math.min(150, width * 0.28), y: centerY },
+        { x: centerX, y: centerY },
+        { x: centerX + Math.min(150, width * 0.28), y: centerY }
+      ];
+    }
+
+    // If nodes already exist, update targets and docks smoothly without resetting drag
+    if (nodesRef.current.length === config.steps.length) {
+      nodesRef.current.forEach((node, idx) => {
+        const dockX = (width / 4) * (idx + 1);
+        const dockY = height - 52;
+        const target = targets[idx] || { x: centerX, y: centerY };
+        node.targetX = target.x;
+        node.targetY = target.y;
+        node.dockX = dockX;
+        node.dockY = dockY;
+        if (node.isPlaced && !node.isDragging) {
+          node.x = target.x;
+          node.y = target.y;
+        }
+      });
+    } else {
+      // First initialization
+      nodesRef.current = config.steps.map((step: any, idx: number) => {
+        const isPlaced = !!tactileItems[step.id];
+        const dockX = (width / 4) * (idx + 1);
+        const dockY = height - 52;
+        const target = targets[idx] || { x: centerX, y: centerY };
+
+        return {
+          id: step.id,
+          name: step.name,
+          role: step.role,
+          icon: step.icon,
+          color: step.color,
+          colorHex: getColorHex(step.color),
+          x: isPlaced ? target.x : dockX,
+          y: isPlaced ? target.y : dockY,
+          vx: 0,
+          vy: 0,
+          radius: idx === 0 ? 30 : idx === 1 ? 25 : 22,
+          targetX: target.x,
+          targetY: target.y,
+          dockX,
+          dockY,
+          isDragging: false,
+          isPlaced,
+          squishX: 1,
+          squishY: 1,
+          orbitAngle: idx * (Math.PI / 2)
+        };
+      });
+    }
+
+    // Initialize Gel Grid
+    const cols = 16;
+    const rows = 9;
+    const cellW = width / (cols - 1);
+    const cellH = height / (rows - 1);
+    const gel = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const gx = c * cellW;
+        const gy = r * cellH;
+        gel.push({ x: gx, y: gy, origX: gx, origY: gy, vx: 0, vy: 0 });
+      }
+    }
+    gelGridRef.current = gel;
+
+    // Initialize Magnetic Sand
+    if (magneticSandRef.current.length === 0) {
+      const sand = [];
+      for (let i = 0; i < 180; i++) {
+        const sx = Math.random() * width;
+        const sy = Math.random() * height;
+        sand.push({
+          x: sx,
+          y: sy,
+          origX: sx,
+          origY: sy,
+          vx: 0,
+          vy: 0,
+          color: i % 2 === 0 ? '#14b8a6' : '#38bdf8'
+        });
+      }
+      magneticSandRef.current = sand;
+    }
+  };
+
+  useEffect(() => {
+    updateDimensionsAndPositions();
+
+    const observer = new ResizeObserver(() => {
+      updateDimensionsAndPositions();
+    });
+
+    if (canvasRef.current) observer.observe(canvasRef.current);
+    if (containerRef.current) observer.observe(containerRef.current);
+
+    return () => observer.disconnect();
+  }, [config.conceptType]);
+
+  // Sync external tactileItems
+  useEffect(() => {
+    nodesRef.current.forEach(node => {
+      const shouldBePlaced = !!tactileItems[node.id];
+      if (node.isPlaced !== shouldBePlaced && !node.isDragging) {
+        node.isPlaced = shouldBePlaced;
+      }
+    });
+  }, [tactileItems]);
+
+  // 60fps Physical Render Loop
+  useEffect(() => {
+    let animationFrameId: number;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const render = () => {
+      try {
+        const width = canvas.width || 760;
+        const height = canvas.height || 380;
+        ctx.clearRect(0, 0, width, height);
+
+        const pointer = pointerRef.current;
+        const nodes = nodesRef.current;
+        const allActive = nodes.length === 3 && nodes.every(n => !!tactileItems[n.id]);
+
+        // 1. MEDIUM SIMULATION & BACKGROUND
+        if (tactileMode === 'gel') {
+          const gel = gelGridRef.current;
+          for (let i = 0; i < gel.length; i++) {
+            const pt = gel[i];
+            const fx = (pt.origX - pt.x) * 0.22;
+            const fy = (pt.origY - pt.y) * 0.22;
+
+            if (pointer.isDown && pointer.x > 0) {
+              const dx = pointer.x - pt.x;
+              const dy = pointer.y - pt.y;
+              const dist = Math.hypot(dx, dy);
+              if (dist < 110 && dist > 1) {
+                const push = ((110 - dist) / 110) * 10;
+                pt.vx -= (dx / dist) * push;
+                pt.vy -= (dy / dist) * push;
+              }
+            }
+
+            pt.vx = Math.max(-10, Math.min(10, (pt.vx + fx) * 0.88));
+            pt.vy = Math.max(-10, Math.min(10, (pt.vy + fy) * 0.88));
+            pt.x += pt.vx;
+            pt.y += pt.vy;
+          }
+
+          ctx.strokeStyle = 'rgba(20, 184, 166, 0.16)';
+          ctx.lineWidth = 1;
+          const cols = 16;
+          const rows = 9;
+          for (let r = 0; r < rows; r++) {
+            ctx.beginPath();
+            for (let c = 0; c < cols; c++) {
+              const pt = gel[r * cols + c];
+              if (pt) {
+                if (c === 0) ctx.moveTo(pt.x, pt.y);
+                else ctx.lineTo(pt.x, pt.y);
+              }
+            }
+            ctx.stroke();
+          }
+          for (let c = 0; c < cols; c++) {
+            ctx.beginPath();
+            for (let r = 0; r < rows; r++) {
+              const pt = gel[r * cols + c];
+              if (pt) {
+                if (r === 0) ctx.moveTo(pt.x, pt.y);
+                else ctx.lineTo(pt.x, pt.y);
+              }
+            }
+            ctx.stroke();
+          }
+        } else if (tactileMode === 'fluid') {
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+          ctx.fillRect(0, 0, width, height);
+          const time = Date.now() * 0.003;
+          for (let y = 30; y < height - 15; y += 28) {
+            ctx.beginPath();
+            ctx.strokeStyle = `rgba(56, 189, 248, ${0.08 + Math.sin(time + y * 0.05) * 0.04})`;
+            ctx.lineWidth = 1.5;
+            for (let x = 0; x <= width; x += 16) {
+              let dy = Math.sin(x * 0.02 + time + y * 0.02) * 4;
+              if (pointer.isDown && pointer.x > 0) {
+                const dist = Math.hypot(pointer.x - x, pointer.y - y);
+                if (dist < 120) {
+                  dy += Math.sin((dist - time * 30) * 0.15) * ((120 - dist) / 12);
+                }
+              }
+              if (x === 0) ctx.moveTo(x, y + dy);
+              else ctx.lineTo(x, y + dy);
+            }
+            ctx.stroke();
+          }
+        } else if (tactileMode === 'magnetic') {
+          const sand = magneticSandRef.current;
+          sand.forEach(p => {
+            let fx = 0;
+            let fy = 0;
+            if (pointer.isDown && pointer.x > 0) {
+              const dx = pointer.x - p.x;
+              const dy = pointer.y - p.y;
+              const dist = Math.hypot(dx, dy);
+              if (dist < 160 && dist > 5) {
+                const force = ((160 - dist) / 160) * 10;
+                fx += (dx / dist) * force;
+                fy += (dy / dist) * force;
+              }
+            }
+            nodes.forEach(node => {
+              const ndx = node.x - p.x;
+              const ndy = node.y - p.y;
+              const ndist = Math.hypot(ndx, ndy);
+              if (ndist < 120 && ndist > 8) {
+                const nforce = ((120 - ndist) / 120) * 6;
+                fx += (ndx / ndist) * nforce;
+                fy += (ndy / ndist) * nforce;
+              }
+            });
+            fx += (p.origX - p.x) * 0.04;
+            fy += (p.origY - p.y) * 0.04;
+
+            p.vx = Math.max(-8, Math.min(8, (p.vx + fx) * 0.85));
+            p.vy = Math.max(-8, Math.min(8, (p.vy + fy) * 0.85));
+            p.x += p.vx;
+            p.y += p.vy;
+
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            const angle = Math.atan2(p.vy, p.vx);
+            ctx.rotate(angle);
+            ctx.strokeStyle = p.color;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-2.5, 0);
+            ctx.lineTo(2.5, 0);
+            ctx.stroke();
+            ctx.restore();
+          });
+        } else {
+          // Spacetime Gravity Grid
+          ctx.strokeStyle = 'rgba(99, 102, 241, 0.18)';
+          ctx.lineWidth = 1;
+          for (let r = 40; r < height - 15; r += 28) {
+            ctx.beginPath();
+            for (let c = 0; c <= width; c += 16) {
+              let depthY = r;
+              nodes.forEach(node => {
+                const dist = Math.hypot(node.x - c, node.y - r);
+                if (dist < 120) {
+                  depthY += ((120 - dist) / 120) ** 2 * 22;
+                }
+              });
+              if (pointer.isDown && pointer.x > 0) {
+                const pdist = Math.hypot(pointer.x - c, pointer.y - r);
+                if (pdist < 90) {
+                  depthY += ((90 - pdist) / 90) ** 2 * 16;
+                }
+              }
+              if (c === 0) ctx.moveTo(c, depthY);
+              else ctx.lineTo(c, depthY);
+            }
+            ctx.stroke();
+          }
+        }
+
+        // 2. ORBIT LINES & CIRCUIT WIRES (ALWAYS ALIGNED WITH TARGET SOCKETS)
+        if (config.conceptType === 'space' && nodes[0]) {
+          const sun = nodes[0];
+          const earthDist = Math.max(0.1, Math.hypot(nodes[1]?.targetX - sun.targetX, nodes[1]?.targetY - sun.targetY) || 110);
+          const moonDist = Math.max(0.1, Math.hypot(nodes[2]?.targetX - sun.targetX, nodes[2]?.targetY - sun.targetY) || 170);
+
+          ctx.strokeStyle = 'rgba(59, 130, 246, 0.25)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.arc(sun.targetX, sun.targetY, earthDist, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.strokeStyle = 'rgba(20, 184, 166, 0.25)';
+          ctx.beginPath();
+          ctx.arc(sun.targetX, sun.targetY, moonDist, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else if (nodes.length >= 3) {
+          // Wire between fixed target sockets
+          ctx.strokeStyle = allActive ? 'rgba(34, 197, 94, 0.75)' : 'rgba(148, 163, 184, 0.3)';
+          ctx.lineWidth = allActive ? 4 : 2.5;
+          ctx.beginPath();
+          ctx.moveTo(nodes[0].targetX, nodes[0].targetY);
+          ctx.lineTo(nodes[1].targetX, nodes[1].targetY);
+          ctx.lineTo(nodes[2].targetX, nodes[2].targetY);
+          ctx.stroke();
+
+          if (allActive) {
+            const sparkOffset = (Date.now() * 0.12) % 100;
+            ctx.fillStyle = '#fef08a';
+            ctx.shadowColor = '#fef08a';
+            ctx.shadowBlur = 12;
+            ctx.beginPath();
+            const sparkX = nodes[0].targetX + (nodes[2].targetX - nodes[0].targetX) * (sparkOffset / 100);
+            ctx.arc(sparkX, nodes[0].targetY, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          }
+        }
+
+        // 3. TARGET SOCKETS
+        nodes.forEach((node, idx) => {
+          const tx = node.targetX;
+          const ty = node.targetY;
+          const isOccupied = !!tactileItems[node.id];
+          const nodeRadius = Math.max(0.1, (node.radius || 22) + 8);
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(tx, ty, nodeRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = isOccupied ? node.colorHex : 'rgba(148, 163, 184, 0.35)';
+          ctx.lineWidth = isOccupied ? 3 : 2;
+          ctx.setLineDash(isOccupied ? [] : [5, 5]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          if (!isOccupied) {
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
+            ctx.font = 'bold 9px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`SOCKET ${idx + 1}`, tx, ty);
+          }
+          ctx.restore();
+        });
+
+        // 4. PHYSICAL NODES DYNAMICS & RENDERING
+        nodes.forEach((node) => {
+          const isPlaced = !!tactileItems[node.id];
+
+          if (node.isDragging) {
+            // 1:1 Direct Tracking
+            node.x = pointer.x;
+            node.y = pointer.y;
+
+            // Magnetic suction towards socket when within 60px
+            const distToTarget = Math.hypot(node.x - node.targetX, node.y - node.targetY);
+            if (distToTarget < 60) {
+              node.x = node.targetX + (node.x - node.targetX) * 0.35;
+              node.y = node.targetY + (node.y - node.targetY) * 0.35;
+            }
+          } else if (isPlaced) {
+            // Directly anchor at target socket
+            node.x = node.targetX;
+            node.y = node.targetY;
+            node.vx = 0;
+            node.vy = 0;
+          } else {
+            // Settle at dock location
+            node.x = node.dockX;
+            node.y = node.dockY;
+            node.vx = 0;
+            node.vy = 0;
+          }
+
+          // Draw Elastic Tension Cord while dragging
+          if (node.isDragging) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(node.targetX, node.targetY);
+            ctx.lineTo(node.x, node.y);
+            ctx.strokeStyle = `${node.colorHex}cc`;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            const distToTarget = Math.hypot(node.x - node.targetX, node.y - node.targetY);
+            if (distToTarget < 100) {
+              ctx.beginPath();
+              ctx.arc(node.targetX, node.targetY, Math.max(0.1, (node.radius || 22) + 14), 0, Math.PI * 2);
+              ctx.strokeStyle = '#22c55e';
+              ctx.lineWidth = 3;
+              ctx.setLineDash([4, 4]);
+              ctx.stroke();
+              ctx.setLineDash([]);
+            }
+            ctx.restore();
+          }
+
+          // Draw Node Body
+          const rad = Math.max(2, node.radius || 22);
+          ctx.save();
+          ctx.translate(node.x, node.y);
+
+          ctx.shadowColor = node.colorHex;
+          ctx.shadowBlur = isPlaced || node.isDragging ? 24 : 10;
+
+          const grad = ctx.createRadialGradient(-rad * 0.3, -rad * 0.3, 2, 0, 0, rad);
+          grad.addColorStop(0, '#ffffff');
+          grad.addColorStop(0.3, node.colorHex);
+          grad.addColorStop(1, '#0f172a');
+
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(0, 0, rad, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+          ctx.beginPath();
+          ctx.ellipse(-rad * 0.35, -rad * 0.35, Math.max(0.1, rad * 0.3), Math.max(0.1, rad * 0.18), -Math.PI / 4, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Node Label
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 11px system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(node.name.split(' ')[0], 0, rad + 14);
+          ctx.restore();
+        });
+
+        // 5. ALL ACTIVE RESONANCE OVERLAY ON CANVAS
+        if (allActive) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(34, 197, 94, 0.2)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(10, 10, width - 20, height - 20);
+          ctx.restore();
+        }
+
+        // 6. TOUCH SHOCKWAVES
+        const ripples = ripplesRef.current;
+        for (let i = ripples.length - 1; i >= 0; i--) {
+          const r = ripples[i];
+          r.r += 4.5;
+          r.alpha *= 0.94;
+          const safeR = Math.max(0.1, Math.abs(r.r));
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(r.x, r.y, safeR, 0, Math.PI * 2);
+          ctx.strokeStyle = r.color.replace(')', `, ${Math.max(0, r.alpha)})`).replace('rgb', 'rgba');
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.restore();
+          if (r.alpha < 0.02 || r.r > r.maxR) ripples.splice(i, 1);
+        }
+
+        // 7. BURST PARTICLES (SAFE POSITIVE RADIUS)
+        const particles = particlesRef.current;
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.life++;
+          const alpha = Math.max(0, Math.min(1, 1 - p.life / p.maxLife));
+          const safeSize = Math.max(0.1, (p.size || 3) * alpha);
+          ctx.save();
+          ctx.fillStyle = `${p.color}${Math.floor(alpha * 255).toString(16).padStart(2, '0')}`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, safeSize, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          if (p.life >= p.maxLife) particles.splice(i, 1);
+        }
+      } catch (err) {
+        console.warn("Tactile render frame recovered:", err);
+      } finally {
+        animationFrameId = requestAnimationFrame(render);
+      }
+    };
+
+    render();
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [tactileMode, soundEnabled, tactileItems]);
+
+  // Pointer Handlers with Accurate Coordinate Scaling
+  const getScaledCoordinates = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width ? canvas.width / rect.width : 1;
+    const scaleY = rect.height ? canvas.height / rect.height : 1;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY
+    };
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const { x, y } = getScaledCoordinates(e);
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (_) {}
+
+    const nodes = nodesRef.current;
+    let pickedIndex = -1;
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const node = nodes[i];
+      const dist = Math.hypot(node.x - x, node.y - y);
+      if (dist <= node.radius + 24) {
+        pickedIndex = i;
+        break;
+      }
+    }
+
+    pointerRef.current = {
+      x,
+      y,
+      isDown: true,
+      lastX: x,
+      lastY: y,
+      speed: 0,
+      activeNodeIdx: pickedIndex
+    };
+
+    if (pickedIndex !== -1) {
+      const node = nodes[pickedIndex];
+      node.isDragging = true;
+      triggerHapticAudio(340, 0.12, 'sine');
+      setActiveTouchHint(`Dragging ${node.name} • Release into the glowing socket.`);
+    } else {
+      // Check if user clicked directly on any target socket to toggle it
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        const socketDist = Math.hypot(node.targetX - x, node.targetY - y);
+        if (socketDist <= node.radius + 20) {
+          const nextState = !tactileItems[node.id];
+          node.isPlaced = nextState;
+          node.x = nextState ? node.targetX : node.dockX;
+          node.y = nextState ? node.targetY : node.dockY;
+          node.vx = 0;
+          node.vy = 0;
+          setTactileItems(prev => ({ ...prev, [node.id]: nextState }));
+          triggerHapticAudio(nextState ? 523 : 220, 0.15);
+          return;
+        }
+      }
+
+      ripplesRef.current.push({
+        x,
+        y,
+        r: 8,
+        maxR: 150,
+        alpha: 0.8,
+        color: 'rgb(20, 184, 166)'
+      });
+      triggerHapticAudio(220, 0.08, 'triangle');
+      setActiveTouchHint("Tactile impulse wave propagated across the medium.");
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!pointerRef.current.isDown) return;
+    const { x, y } = getScaledCoordinates(e);
+
+    const prev = pointerRef.current;
+    const speed = Math.hypot(x - prev.lastX, y - prev.lastY);
+    pointerRef.current = {
+      x,
+      y,
+      isDown: true,
+      lastX: x,
+      lastY: y,
+      speed,
+      activeNodeIdx: prev.activeNodeIdx
+    };
+
+    if (prev.activeNodeIdx !== -1 && nodesRef.current[prev.activeNodeIdx]) {
+      const node = nodesRef.current[prev.activeNodeIdx];
+      const distToTarget = Math.hypot(node.x - node.targetX, node.y - node.targetY);
+      if (speed > 3) {
+        const pitch = Math.min(800, 280 + distToTarget * 1.4);
+        triggerHapticAudio(pitch, 0.04, 'sine');
+      }
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch (_) {}
+
+    const activeIdx = pointerRef.current.activeNodeIdx;
+    const currentX = pointerRef.current.x;
+    const currentY = pointerRef.current.y;
+    pointerRef.current.isDown = false;
+    pointerRef.current.activeNodeIdx = -1;
+
+    if (activeIdx !== -1 && nodesRef.current[activeIdx]) {
+      const node = nodesRef.current[activeIdx];
+      node.isDragging = false;
+      const distToTarget = Math.hypot(node.x - node.targetX, node.y - node.targetY);
+      const pointerDist = Math.hypot(currentX - node.targetX, currentY - node.targetY);
+
+      // Snap if released within 100px of target OR if pointer was over target
+      if (distToTarget < 100 || pointerDist < 100) {
+        node.isPlaced = true;
+        node.x = node.targetX;
+        node.y = node.targetY;
+        node.vx = 0;
+        node.vy = 0;
+
+        triggerHapticAudio(523, 0.2, 'sine');
+        setTimeout(() => triggerHapticAudio(659, 0.25, 'sine'), 70);
+
+        for (let i = 0; i < 20; i++) {
+          const angle = (Math.PI * 2 * i) / 20;
+          particlesRef.current.push({
+            x: node.targetX,
+            y: node.targetY,
+            vx: Math.cos(angle) * (3 + Math.random() * 3),
+            vy: Math.sin(angle) * (3 + Math.random() * 3),
+            life: 0,
+            maxLife: 25 + Math.random() * 15,
+            color: node.colorHex || '#14b8a6',
+            size: 3 + Math.random() * 2
+          });
+        }
+
+        ripplesRef.current.push({
+          x: node.targetX,
+          y: node.targetY,
+          r: 5,
+          maxR: 160,
+          alpha: 0.9,
+          color: 'rgb(34, 197, 94)'
+        });
+
+        setTactileItems(prev => ({ ...prev, [node.id]: true }));
+        toast.success(`Snapped ${node.name} into place!`);
+        setActiveTouchHint(`✅ ${node.name} is securely anchored. Drag the next item!`);
+      } else {
+        // If it was released far away from socket, unplace it
+        node.isPlaced = false;
+        node.x = node.dockX;
+        node.y = node.dockY;
+        node.vx = 0;
+        node.vy = 0;
+
+        triggerHapticAudio(180, 0.14, 'triangle');
+        setTactileItems(prev => ({ ...prev, [node.id]: false }));
+        setActiveTouchHint("Spring rebound! Drag closer to the socket to anchor.");
+      }
+    }
+  };
+
+  const activeCount = Object.values(tactileItems).filter(Boolean).length;
+  const isAllActive = activeCount === 3;
+
+  return (
+    <div ref={containerRef} className="relative w-full rounded-3xl border border-slate-800 bg-slate-950/95 overflow-hidden shadow-2xl p-6 sm:p-8 flex flex-col gap-6 text-slate-100">
+      {/* Dynamic Background */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-950/30 via-slate-950 to-black pointer-events-none" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#33415510_1px,transparent_1px),linear-gradient(to_bottom,#33415510_1px,transparent_1px)] bg-[size:28px_28px] pointer-events-none" />
+
+      {/* TOP HEADER */}
+      <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <Badge variant="outline" className="bg-teal-500/10 text-teal-400 border-teal-500/30 text-xs font-semibold px-3 py-1">
+              {config.badge}
+            </Badge>
+            <span className="text-xs font-mono text-slate-400">
+              Tactile Physics Sandbox ({activeCount}/3 Anchored)
+            </span>
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-black font-heading text-white">
+            {config.title}
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-300">
+            {config.subtitle}
+          </p>
+        </div>
+
+        {/* Top Controls */}
+        <div className="flex items-center gap-2.5">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setTactileItems({ item1: false, item2: false, item3: false });
+              nodesRef.current.forEach(n => {
+                n.isPlaced = false;
+                n.x = n.dockX;
+                n.y = n.dockY;
+                n.vx = 0;
+                n.vy = 0;
+              });
+              triggerHapticAudio(280, 0.2);
+              toast.info("Tactile sandbox reset.");
+            }}
+            className="h-9 rounded-xl border-slate-800 bg-slate-900 text-xs font-semibold text-slate-300 hover:text-white gap-1.5"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reset Canvas
+          </Button>
+
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            className={`h-9 w-9 rounded-xl border-slate-800 ${soundEnabled ? 'bg-slate-900 text-teal-400 border-teal-500/30' : 'bg-slate-900/50 text-slate-500'}`}
+            title={soundEnabled ? "Haptic Audio: On" : "Haptic Audio: Off"}
+          >
+            {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+          </Button>
+        </div>
+      </div>
+
+      {/* SENSORY MATERIAL MODE BAR */}
+      <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-slate-800/90 p-2.5 rounded-2xl">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs font-mono text-slate-400 px-2 flex items-center gap-1.5">
+            <Hand className="h-3.5 w-3.5 text-teal-400" /> Touch Feel:
+          </span>
+          <button
+            onClick={() => { setTactileMode('gel'); triggerHapticAudio(400); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${tactileMode === 'gel' ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20' : 'bg-slate-800/80 text-slate-300 hover:text-white'}`}
+          >
+            🧪 Squishy Elastic Gel
+          </button>
+          <button
+            onClick={() => { setTactileMode('fluid'); triggerHapticAudio(480); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${tactileMode === 'fluid' ? 'bg-blue-500 text-white shadow-md shadow-blue-500/20' : 'bg-slate-800/80 text-slate-300 hover:text-white'}`}
+          >
+            <Waves className="h-3.5 w-3.5" /> Liquid Waves
+          </button>
+          <button
+            onClick={() => { setTactileMode('magnetic'); triggerHapticAudio(540); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${tactileMode === 'magnetic' ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20' : 'bg-slate-800/80 text-slate-300 hover:text-white'}`}
+          >
+            <Magnet className="h-3.5 w-3.5" /> Magnetic Sand
+          </button>
+          <button
+            onClick={() => { setTactileMode('gravity'); triggerHapticAudio(360); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${tactileMode === 'gravity' ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20' : 'bg-slate-800/80 text-slate-300 hover:text-white'}`}
+          >
+            <Orbit className="h-3.5 w-3.5" /> Spacetime Fabric
+          </button>
+        </div>
+
+        {/* Pulse Shockwave Button */}
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            ripplesRef.current.push({
+              x: canvas.width / 2,
+              y: canvas.height * 0.44,
+              r: 10,
+              maxR: 240,
+              alpha: 0.9,
+              color: 'rgb(20, 184, 166)'
+            });
+            triggerHapticAudio(300, 0.35, 'triangle');
+            toast.success("Tactile impulse wave discharged!");
+          }}
+          className="text-xs text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 font-bold"
+        >
+          <Sparkles className="h-3.5 w-3.5 mr-1" />
+          Pulse Shockwave
+        </Button>
+      </div>
+
+      {/* MAIN INTERACTIVE CANVAS */}
+      <div className="relative z-10 w-full rounded-2xl border-2 border-slate-800 bg-slate-950/80 overflow-hidden shadow-inner flex flex-col items-center select-none">
+        <canvas
+          ref={canvasRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          className="w-full h-[360px] sm:h-[400px] cursor-grab active:cursor-grabbing touch-none block"
+        />
+
+        {/* Live Touch Feedback Bar */}
+        <div className="w-full bg-slate-900/90 border-t border-slate-800/80 px-4 py-2 flex items-center justify-between text-xs font-mono text-slate-300">
+          <span className="flex items-center gap-2 truncate">
+            <span className="w-2 h-2 rounded-full bg-teal-400 animate-ping shrink-0" />
+            {activeTouchHint}
+          </span>
+          <span className="text-[11px] text-slate-400 hidden sm:inline">
+            Drag bodies into glowing sockets • Release to snap
+          </span>
+        </div>
+      </div>
+
+      {/* 3 SYNCHRONIZED STEP CARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {config.steps.map((step: any, index: number) => {
+          const isActive = tactileItems[step.id];
+
+          return (
+            <div
+              key={step.id}
+              onClick={() => {
+                const nextState = !isActive;
+                setTactileItems(prev => ({ ...prev, [step.id]: nextState }));
+                const node = nodesRef.current[index];
+                if (node) {
+                  node.isPlaced = nextState;
+                  node.x = nextState ? node.targetX : node.dockX;
+                  node.y = nextState ? node.targetY : node.dockY;
+                  node.vx = 0;
+                  node.vy = 0;
+                }
+                triggerHapticAudio(nextState ? 420 + index * 80 : 260);
+              }}
+              className={`p-5 rounded-2xl border-2 transition-all duration-300 cursor-pointer flex flex-col justify-between gap-3 shadow-lg ${isActive ? 'bg-teal-950/40 border-teal-500 shadow-teal-500/10 transform -translate-y-1' : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-xl border ${isActive ? 'bg-teal-500/20 border-teal-400 text-teal-300' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+                    {step.icon === 'Sun' && <Sun className="h-5 w-5" />}
+                    {step.icon === 'Globe' && <Globe className="h-5 w-5" />}
+                    {step.icon === 'Moon' && <Moon className="h-5 w-5" />}
+                    {step.icon === 'Shield' && <Shield className="h-5 w-5" />}
+                    {step.icon === 'Zap' && <Zap className="h-5 w-5" />}
+                    {step.icon === 'Atom' && <Atom className="h-5 w-5" />}
+                    {step.icon === 'Battery' && <Battery className="h-5 w-5" />}
+                    {step.icon === 'Lightbulb' && <Lightbulb className="h-5 w-5" />}
+                    {step.icon === 'Layers' && <Layers className="h-5 w-5" />}
+                    {step.icon === 'Sparkles' && <Sparkles className="h-5 w-5" />}
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono text-slate-400 font-bold uppercase block">
+                      STEP {step.stepNumber}
+                    </span>
+                    <h4 className={`text-sm font-bold font-heading ${isActive ? 'text-teal-300' : 'text-white'}`}>
+                      {step.name}
+                    </h4>
+                  </div>
+                </div>
+
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center border transition-colors ${isActive ? 'bg-teal-500 border-teal-400 text-slate-950 font-bold' : 'border-slate-700 text-transparent'}`}>
+                  <Check className="h-3.5 w-3.5 stroke-[3]" />
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {step.desc}
+              </p>
+
+              <div className="pt-2 border-t border-slate-800/80">
+                <span className="text-[11px] text-teal-400/90 font-sans block">
+                  💡 {step.fact}
+                </span>
+              </div>
+
+              <Button
+                size="sm"
+                className={`w-full h-8 rounded-xl font-bold text-xs mt-1 transition-all ${isActive ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 hover:bg-teal-500/30' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'}`}
+              >
+                {isActive ? "Anchored (Tap to Detach)" : "Tap or Drag into Canvas Socket"}
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* COMPLETION MASTERY BANNER */}
+      {isAllActive && (
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-teal-950 via-emerald-950 to-slate-950 border-2 border-teal-400 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in zoom-in duration-300">
+          <div className="flex items-center gap-4 text-center sm:text-left">
+            <div className="p-3 bg-teal-500/20 rounded-2xl text-teal-400">
+              <Award className="h-8 w-8" />
+            </div>
+            <div>
+              <h4 className="text-base font-bold text-white font-heading">
+                {config.successTitle}
+              </h4>
+              <p className="text-xs text-teal-300/90 mt-0.5">
+                {config.successSummary}
+              </p>
+            </div>
+          </div>
+
+          <Button
+            onClick={handleCompleteLesson}
+            disabled={isCompleted}
+            className="rounded-full bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-sm h-11 px-6 shadow-lg shadow-teal-500/20 gap-2 shrink-0"
+          >
+            <CheckCircle className="h-4 w-4" />
+            {isCompleted ? "Lesson Mastered" : "Mark Lesson Mastered"}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function LessonViewerPage() {
   const params = useParams();
@@ -66,154 +1105,221 @@ export default function LessonViewerPage() {
   
   // AR State
   const [arCursor, setArCursor] = useState({ x: 50, y: 50 });
+  const smoothArCursorRef = useRef({ x: 50, y: 50 });
   const [arPickedItem, setArPickedItem] = useState<number | null>(null);
   const [arPlacedItems, setArPlacedItems] = useState({ 0: false, 1: false, 2: false });
   const [arExplosion, setArExplosion] = useState(false);
 
-  // --- TACTILE INSTRUMENT STATE ---
-  const [instrumentValues, setInstrumentValues] = useState<Record<string, any>>({});
-  const [tactileSuccess, setTactileSuccess] = useState(false);
-  
-  // Teardown state
-  const [teardownStage, setTeardownStage] = useState(0);
-  const [screwsState, setScrewsState] = useState<Record<string, number>>({});
-  const [activeScrew, setActiveScrew] = useState<string | null>(null);
-  const [layerOffset, setLayerOffset] = useState({ x: 0, y: 0 });
-  const [activeHotspot, setActiveHotspot] = useState<string | null>(null);
+  // --- HANDS-ON TACTILE LAB STATE ---
+  const [tactileItems, setTactileItems] = useState<Record<string, boolean>>({ item1: false, item2: false, item3: false });
+  const [tactileEnergySpeed, setTactileEnergySpeed] = useState<number>(1); // 1: Normal, 2: High Speed, 3: Turbo
+  const [isSimulatingPulse, setIsSimulatingPulse] = useState(false);
+  const [tactileSound, setTactileSound] = useState(true);
 
-  // Dynamic Tactile Instrument Theme
-  const getInstrumentTheme = (lesson: any) => {
-    const title = lesson?.title || "";
-    const content = lesson?.content || "";
+  // Friendly Audio Chime Synthesizer
+  const playTactileTone = (freq = 440, duration = 0.16) => {
+    if (typeof window === 'undefined' || !tactileSound) return;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + duration);
+    } catch (e) {}
+  };
+
+  // Easy Hands-on Lab Configuration
+  const getTactileLabConfig = (lessonData: any) => {
+    const title = lessonData?.title || "";
+    const content = lessonData?.content || "";
     const t = title.toLowerCase();
-    
-    if (t.includes("solar") || t.includes("planet") || t.includes("space")) {
+
+    if (t.includes("solar") || t.includes("planet") || t.includes("space") || t.includes("star") || t.includes("earth") || t.includes("orbit")) {
       return {
-        mode: 'orbital',
-        title: "Orbital Mechanics Console",
-        bgClass: "bg-slate-900",
-        controls: [
-          { id: "grav", type: "slider", target: 9.8, min: 0, max: 20 },
-          { id: "vel", type: "slider", target: 75, min: 0, max: 100 },
-          { id: "thruster", type: "switch", target: true }
+        conceptType: "space",
+        title: "Hands-On Solar System Lab",
+        subtitle: "Touch and activate each celestial body to build a working planetary orbit!",
+        badge: "Astronomy & Gravity",
+        accentColor: "amber",
+        steps: [
+          {
+            id: "item1",
+            stepNumber: 1,
+            name: "Ignite the Sun",
+            role: "Center Star & Gravity Well",
+            desc: "The massive gravitational anchor holding planets in stable orbit.",
+            icon: "Sun",
+            color: "amber",
+            fact: "The Sun contains 99.8% of all mass in our solar system!"
+          },
+          {
+            id: "item2",
+            stepNumber: 2,
+            name: "Launch Planet Earth",
+            role: "Habitable Goldilocks Zone",
+            desc: "The middle orbit where liquid water and atmosphere can thrive.",
+            icon: "Globe",
+            color: "blue",
+            fact: "Earth is situated at the perfect distance for life to flourish."
+          },
+          {
+            id: "item3",
+            stepNumber: 3,
+            name: "Tether the Moon",
+            role: "Natural Satellite & Tides",
+            desc: "The outer orbital partner that stabilizes Earth's axial tilt and tides.",
+            icon: "Moon",
+            color: "teal",
+            fact: "The Moon's gravitational pull controls our ocean tides every day."
+          }
         ],
-        successText: "ORBIT STABILIZED"
+        pulseLabel: "Simulate Solar Gravitational Flare",
+        successTitle: "Solar System Active & In Perfect Orbit!",
+        successSummary: "All gravitational forces are balanced. The planets and moon are orbiting smoothly!"
       };
     }
-    if (t.includes("cell") || t.includes("biol") || t.includes("plant") || t.includes("animal")) {
+
+    if (t.includes("cell") || t.includes("biol") || t.includes("plant") || t.includes("animal") || t.includes("gene") || t.includes("dna") || t.includes("body")) {
       return {
-        mode: 'microscope',
-        title: "Microscope Control Panel",
-        bgClass: "bg-emerald-950",
-        controls: [
-          { id: "focus", type: "slider", target: 400, min: 100, max: 1000 },
-          { id: "panX", type: "slider", target: 50, min: 0, max: 100 },
-          { id: "panY", type: "slider", target: 50, min: 0, max: 100 }
+        conceptType: "biology",
+        title: "Hands-On Living Cell Builder",
+        subtitle: "Touch and place each vital organelle to bring the microscopic cell to life!",
+        badge: "Cellular Biology",
+        accentColor: "emerald",
+        steps: [
+          {
+            id: "item1",
+            stepNumber: 1,
+            name: "Build Cell Membrane",
+            role: "Protective Outer Barrier",
+            desc: "A selective shield that protects the cell and controls what enters.",
+            icon: "Shield",
+            color: "teal",
+            fact: "The membrane is like a security guard deciding who gets in and out."
+          },
+          {
+            id: "item2",
+            stepNumber: 2,
+            name: "Place Mitochondria",
+            role: "Cellular Powerhouse",
+            desc: "Generates ATP chemical energy to fuel all cell activities.",
+            icon: "Zap",
+            color: "amber",
+            fact: "Mitochondria convert the food we eat into usable cellular energy!"
+          },
+          {
+            id: "item3",
+            stepNumber: 3,
+            name: "Insert DNA Nucleus",
+            role: "Master Control Center",
+            desc: "Contains all the genetic blueprints and instructions for life.",
+            icon: "Atom",
+            color: "purple",
+            fact: "The nucleus holds all the DNA code that makes living organisms unique."
+          }
         ],
-        successText: "SPECIMEN RESOLVED"
+        pulseLabel: "Simulate ATP Cellular Energy Surge",
+        successTitle: "Cell Alive & Fully Synthesized!",
+        successSummary: "The protective membrane, energy generators, and DNA control center are working together!"
       };
     }
-    
-    if (t.includes("physic") || t.includes("law") || t.includes("newton") || t.includes("force") || t.includes("motion") || t.includes("energy")) {
-       return {
-         mode: 'physics',
-         title: "Physics Simulator",
-         bgClass: "bg-indigo-950",
-         controls: [
-           { id: "mass", type: "slider", target: 50, min: 1, max: 100 },
-           { id: "force", type: "slider", target: 80, min: 0, max: 100 },
-           { id: "friction", type: "slider", target: 10, min: 0, max: 50 }
-         ],
-         successText: "KINETIC ENERGY STABILIZED"
-       };
+
+    if (t.includes("physic") || t.includes("force") || t.includes("motion") || t.includes("energy") || t.includes("mechanic") || t.includes("newton") || t.includes("electric")) {
+      return {
+        conceptType: "physics",
+        title: "Hands-On Energy & Circuit Lab",
+        subtitle: "Connect the power source, conductor, and motor to complete the kinetic circuit!",
+        badge: "Physics & Energy",
+        accentColor: "indigo",
+        steps: [
+          {
+            id: "item1",
+            stepNumber: 1,
+            name: "Connect 12V Battery",
+            role: "Electrical Potential Source",
+            desc: "Provides voltage pressure to push electrons through the wire.",
+            icon: "Battery",
+            color: "red",
+            fact: "Voltage is the electrical pressure that drives current forward."
+          },
+          {
+            id: "item2",
+            stepNumber: 2,
+            name: "Close Circuit Switch",
+            role: "Current Flow Conductor",
+            desc: "Completes the closed loop so energy can travel without interruption.",
+            icon: "Zap",
+            color: "amber",
+            fact: "Electricity can only flow when there is a continuous, unbroken path."
+          },
+          {
+            id: "item3",
+            stepNumber: 3,
+            name: "Power the Kinetic Motor",
+            role: "Energy Transformer",
+            desc: "Converts electrical current into mechanical rotation and light.",
+            icon: "Lightbulb",
+            color: "emerald",
+            fact: "Energy cannot be destroyed—it only changes from electrical to kinetic form!"
+          }
+        ],
+        pulseLabel: "Send High-Voltage Power Surge",
+        successTitle: "Circuit Complete & Motor Spinning!",
+        successSummary: "Current is flowing continuously and the motor is generating kinetic energy!"
+      };
     }
-    
-    // Interactive Teardown Fallback
-    let fallbackTheme = {
-      mode: 'teardown',
-      title: "Interactive Teardown",
-      bgClass: "bg-slate-950",
-      layers: [
+
+    // General Science / CS / Chemistry Lab
+    return {
+      conceptType: "general",
+      title: "Hands-On Concept Discovery Lab",
+      subtitle: "Touch and activate the 3 core foundations to complete your interactive experiment!",
+      badge: "Hands-On Learning",
+      accentColor: "teal",
+      steps: [
         {
-          id: "l1",
-          name: "Outer Chassis",
-          prompt: "Highly detailed macro photography of a metallic chassis, studio lighting, hyperrealistic, 8k",
-          screws: [{id:'s0', x: 15, y: 20}, {id:'s1', x: 85, y: 20}, {id:'s2', x: 15, y: 80}, {id:'s3', x: 85, y: 80}],
-          hotspots: [{ x: 30, y: 30, label: "Outer Shell" }, { x: 70, y: 70, label: "Surface Casing" }]
+          id: "item1",
+          stepNumber: 1,
+          name: "1. Core Foundation",
+          role: "Initial Input & Source",
+          desc: "Sets the baseline input parameters for the interactive system.",
+          icon: "Layers",
+          color: "blue",
+          fact: "Every successful system starts with a strong, well-defined foundation."
         },
         {
-          id: "l2",
-          name: "Internal Mechanism",
-          prompt: "Highly detailed macro photography of complex internal gears and circuits, hyperrealistic",
-          hotspots: [{ x: 50, y: 50, label: "Main Processor / Gear" }]
+          id: "item2",
+          stepNumber: 2,
+          name: "2. Active Engine",
+          role: "Process & Transformation",
+          desc: "Transforms inputs through logical rules, reactions, or mechanics.",
+          icon: "Zap",
+          color: "amber",
+          fact: "The core engine processes inputs and drives the main reaction."
         },
         {
-          id: "l3",
-          name: "Core Essence",
-          prompt: "Highly detailed macro photography of a glowing energy core, hyperrealistic",
-          hotspots: [{ x: 50, y: 50, label: "Absolute Core" }]
+          id: "item3",
+          stepNumber: 3,
+          name: "3. Result Output",
+          role: "Stable Completed State",
+          desc: "Achieves full operational harmony and demonstrates the final concept.",
+          icon: "Sparkles",
+          color: "emerald",
+          fact: "When all components link together, the system functions seamlessly!"
         }
       ],
-      controls: [],
-      successText: "CORE REVEALED"
+      pulseLabel: "Test Interactive Reaction Pulse",
+      successTitle: "Experiment Complete & Synchronized!",
+      successSummary: "All 3 components are active and balanced in complete harmony!"
     };
-
-    if (content) {
-      const match = content.match(/<!--\s*TACTILE_DATA:\s*([\s\S]*?)\s*-->/);
-      if (match && match[1]) {
-        try {
-          const parsed = JSON.parse(match[1].trim());
-          if (parsed.title && parsed.layers) {
-            fallbackTheme.title = parsed.title;
-            // Merge in the AI prompts, names, and hotspots
-            for (let i = 0; i < 3; i++) {
-               if (parsed.layers[i]) {
-                  fallbackTheme.layers[i].prompt = parsed.layers[i].prompt || fallbackTheme.layers[i].prompt;
-                  fallbackTheme.layers[i].name = parsed.layers[i].name || fallbackTheme.layers[i].name;
-                  if (parsed.layers[i].hotspots && parsed.layers[i].hotspots.length > 0) {
-                      (fallbackTheme.layers[i] as any).hotspots = parsed.layers[i].hotspots;
-                  }
-               }
-            }
-          }
-        } catch(e) { console.error("Failed to parse tactile data"); }
-      }
-    }
-
-    return fallbackTheme;
-  };
-
-  const checkInstrumentSuccess = (newValues: Record<string, any>, theme: any) => {
-    let success = true;
-    
-    if (theme.mode === 'teardown') {
-      if (newValues['teardown_success']) {
-         success = true;
-      } else {
-         success = false;
-      }
-    } else {
-      for (const ctrl of theme.controls) {
-        const val = newValues[ctrl.id];
-        if (val === undefined) { success = false; break; }
-        if (ctrl.type === "slider") {
-          if (Math.abs((val as number) - (ctrl.target as number)) > 0.01) { success = false; break; }
-        } else {
-          if (val !== ctrl.target) { success = false; break; }
-        }
-      }
-    }
-    
-    if (success && !tactileSuccess) {
-      setTactileSuccess(true);
-      setTimeout(() => setTactileSuccess(false), 3000);
-    }
-  };
-
-  const handleInstrumentChange = (id: string, value: any, theme: any) => {
-    const newValues = { ...instrumentValues, [id]: value };
-    setInstrumentValues(newValues);
-    checkInstrumentSuccess(newValues, theme);
   };
 
   // Removed Particle Engine Loop
@@ -224,10 +1330,20 @@ export default function LessonViewerPage() {
     const detectMotion = () => {
       const video = videoRef.current;
       const canvas = hiddenCanvasRef.current;
-      if (!video || !canvas || video.paused || video.ended) return;
+      if (!video || !canvas || video.paused || video.ended || video.readyState < 2) {
+        if (isWebcamActive) {
+          animationFrameId = requestAnimationFrame(detectMotion);
+        }
+        return;
+      }
       
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) {
+        if (isWebcamActive) {
+          animationFrameId = requestAnimationFrame(detectMotion);
+        }
+        return;
+      }
       
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -292,25 +1408,22 @@ export default function LessonViewerPage() {
             const mappedX = 100 - rawX; 
             const mappedY = (avgY / canvas.height) * 100;
             
-            setArCursor(prev => {
-              const dx = mappedX - prev.x;
-              const dy = mappedY - prev.y;
-              
-              // VELOCITY CLAMPING (Replaces the broken momentum trap)
-              // Instead of freezing the cursor when the hand moves too fast, we simply cap the maximum speed.
-              // It can move a max of 20% of the screen per frame. This eliminates instant teleportation glitches 
-              // while easily allowing the cursor to reach the far corners!
-              const clamp = 20;
-              const clampedDx = Math.max(-clamp, Math.min(clamp, dx));
-              const clampedDy = Math.max(-clamp, Math.min(clamp, dy));
+            // ADAPTIVE LOW-PASS FILTER & EXPONENTIAL SMOOTHING (Zero jitter/shake)
+            const curr = smoothArCursorRef.current;
+            const deltaX = mappedX - curr.x;
+            const deltaY = mappedY - curr.y;
+            const dist = Math.hypot(deltaX, deltaY);
 
-              // Deadzone (1.0%) to freeze the cursor when the hand stops moving
-              if (Math.abs(clampedDx) < 1.0 && Math.abs(clampedDy) < 1.0) return prev;
-              return {
-                x: prev.x + clampedDx * 0.8,
-                y: prev.y + clampedDy * 0.8
-              };
-            });
+            // Filter out camera ISO grain micro-tremor (< 0.4% screen size)
+            if (dist > 0.4) {
+              // Adaptive smoothing: ultra-smooth on small adjustments, responsive on fast swipes
+              const alpha = Math.min(0.65, Math.max(0.20, dist * 0.07));
+              const nextX = Math.max(5, Math.min(95, curr.x + deltaX * alpha));
+              const nextY = Math.max(5, Math.min(95, curr.y + deltaY * alpha));
+              
+              smoothArCursorRef.current = { x: nextX, y: nextY };
+              setArCursor({ x: nextX, y: nextY });
+            }
           }
         }
       }
@@ -338,8 +1451,8 @@ export default function LessonViewerPage() {
     // Shifted X coordinates leftward (20, 45, 70) so they don't hide under the right panel
     const spawns = [ { id: 0, x: 20, y: 80 }, { id: 1, x: 45, y: 80 }, { id: 2, x: 70, y: 80 } ];
     const targets = [ { id: 0, x: 20, y: 20 }, { id: 1, x: 45, y: 20 }, { id: 2, x: 70, y: 20 } ];
-    // Reduced threshold to 6% (requires exact precision, prevents auto-grabbing)
-    const threshold = 6;
+    // Balanced hit tolerance (8.5%) for intuitive, forgiving grabbing & snapping
+    const threshold = 8.5;
 
     if (arPickedItem === null) {
       for (const spawn of spawns) {
@@ -370,12 +1483,25 @@ export default function LessonViewerPage() {
   }, [arCursor, arPickedItem, arPlacedItems, isWebcamActive, arExplosion]);
 
   const [hasCameraStream, setHasCameraStream] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+      videoRef.current.onloadedmetadata = () => {
+        videoRef.current?.play().catch(() => {});
+      };
+      videoRef.current.play().catch(() => {});
+    }
+  }, [cameraStream, isWebcamActive, hasCameraStream]);
 
   const startSimulation = async (withCamera = true) => {
     if (isWebcamActive) {
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream?.getTracks().forEach(track => track.stop());
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        setCameraStream(null);
+      }
+      if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
       setIsWebcamActive(false);
@@ -387,17 +1513,29 @@ export default function LessonViewerPage() {
       setIsWebcamActive(true);
       if (withCamera && typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              facingMode: "user"
+            },
+            audio: false
+          });
+          setCameraStream(stream);
+          setHasCameraStream(true);
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             videoRef.current.play().catch(() => {});
           }
-          setHasCameraStream(true);
-        } catch {
+          toast.success("Webcam AR Motion Sensor Engaged! Move your hand in front of the camera.");
+        } catch (err) {
+          console.warn("Webcam access error:", err);
+          setCameraStream(null);
           setHasCameraStream(false);
-          toast.info("Switched to interactive Virtual Hand touch/mouse mode.");
+          toast.info("Webcam not accessible. Interactive Virtual Hand mouse tracking is active!");
         }
       } else {
+        setCameraStream(null);
         setHasCameraStream(false);
         toast.info("Virtual Hand simulation engaged. Move your cursor to assemble!");
       }
@@ -767,7 +1905,7 @@ export default function LessonViewerPage() {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="bg-transparent border-b border-border/40 p-0 rounded-none h-auto w-full justify-start gap-8 mb-8 flex-nowrap overflow-x-auto no-scrollbar">
               <TabsTrigger value="content" className="text-sm sm:text-base py-3 px-1 rounded-none border-b-2 border-transparent data-[state=active]:border-teal-600 data-[state=active]:text-teal-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold transition-all">Interactive Lesson</TabsTrigger>
-              <TabsTrigger value="tactile" className="text-sm sm:text-base py-3 px-1 rounded-none border-b-2 border-transparent data-[state=active]:border-teal-600 data-[state=active]:text-teal-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold transition-all">Tactile Sandbox</TabsTrigger>
+              <TabsTrigger value="tactile" className="text-sm sm:text-base py-3 px-1 rounded-none border-b-2 border-transparent data-[state=active]:border-teal-600 data-[state=active]:text-teal-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold transition-all">Hands-On Lab</TabsTrigger>
               <TabsTrigger value="kinesthetic" className="text-sm sm:text-base py-3 px-1 rounded-none border-b-2 border-transparent data-[state=active]:border-teal-600 data-[state=active]:text-teal-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold transition-all">Kinesthetic Arena</TabsTrigger>
               <TabsTrigger value="whiteboard" className="text-sm sm:text-base py-3 px-1 rounded-none border-b-2 border-transparent data-[state=active]:border-teal-600 data-[state=active]:text-teal-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold transition-all">Smart Whiteboard</TabsTrigger>
               <TabsTrigger value="highlights" className="text-sm sm:text-base py-3 px-1 rounded-none border-b-2 border-transparent data-[state=active]:border-teal-600 data-[state=active]:text-teal-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none font-semibold transition-all">Study Notes ({lessonAnnotation.highlights.length})</TabsTrigger>
@@ -855,420 +1993,29 @@ export default function LessonViewerPage() {
               </div>
             </TabsContent>
 
-            {/* TAB: TACTILE SANDBOX */}
-            <TabsContent value="tactile" className="mt-0 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* TAB: HANDS-ON CONCEPT LAB (TACTILE TOUCH & FEEL SANDBOX) */}
+            <TabsContent value="tactile" className="mt-0 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {(() => {
-                const iTheme = getInstrumentTheme(lesson);
-                return (
-                  <div className={`relative w-full min-h-[550px] border-4 border-slate-800 rounded-3xl overflow-hidden shadow-2xl p-8 flex flex-col ${iTheme.bgClass}`}>
-                    {/* Metal Panel Background Texture */}
-                    <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000040_2px,transparent_2px),linear-gradient(to_bottom,#00000040_2px,transparent_2px)] bg-[size:100px_100px] opacity-20 pointer-events-none mix-blend-overlay"></div>
-                    
-                    {/* MODE: INTERACTIVE TEARDOWN */}
-                    {iTheme.mode === 'teardown' && (
-                      <div className="relative z-10 flex flex-col h-full w-full flex-1 items-center justify-between">
-                        <div className="text-center mb-8 relative z-20 pointer-events-none">
-                          <h2 className="text-3xl text-teal-400 font-black font-heading tracking-wider uppercase drop-shadow-md">{iTheme.title}</h2>
-                          <p className="text-slate-400 font-mono text-sm mt-2">PHYSICALLY TEAR DOWN THE STRUCTURE TO REVEAL THE CORE</p>
-                        </div>
-                        
-                        {/* CURRENT LAYER HUD IDENTIFIER */}
-                        <div className="absolute bottom-8 left-8 z-30 bg-black/80 backdrop-blur-md border border-teal-900 rounded-xl p-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-                           <p className="text-teal-600 font-mono text-[10px] tracking-widest uppercase mb-1">PART IDENTIFICATION RADAR</p>
-                           <h3 className="text-teal-300 font-mono font-bold text-lg tracking-wider">
-                              {activeHotspot ? activeHotspot.toUpperCase() : (
-                                teardownStage === 0 ? ((iTheme as any).layers[0].name.toUpperCase()) :
-                                teardownStage === 1 ? ((iTheme as any).layers[1].name.toUpperCase()) :
-                                ((iTheme as any).layers[2].name.toUpperCase())
-                              )}
-                           </h3>
-                        </div>
-                        
-                        <div className="relative w-full max-w-2xl flex-1 flex flex-col items-center justify-center">
-                            {/* LAYER 3: CORE ESSENCE */}
-                           <div className={`absolute inset-0 m-auto w-[400px] h-[400px] flex items-center justify-center transition-all duration-1000 delay-500 ${teardownStage >= 2 ? 'opacity-100 scale-100' : 'opacity-0 scale-50 pointer-events-none'}`}>
-                              <img src={`https://image.pollinations.ai/prompt/${encodeURIComponent((iTheme as any).layers[2].prompt)}?width=400&height=400&nologo=true&seed=${lessonSeed}`} alt="Core" className="w-full h-full object-cover rounded-full shadow-[0_0_150px_rgba(45,212,191,0.5)] border-[4px] border-teal-400/50" />
-                              {/* Hotspots for Layer 3 */}
-                              {teardownStage >= 2 && ((iTheme as any).layers[2].hotspots || []).map((hotspot: any, idx: number) => (
-                                 <div 
-                                    key={idx}
-                                    className="absolute z-40"
-                                    style={{ left: `${hotspot.x}%`, top: `${hotspot.y}%` }}
-                                 >
-                                    {/* Center Target */}
-                                    <div 
-                                      className="absolute -ml-1 -mt-1 w-2 h-2 rounded-full bg-teal-400 shadow-[0_0_15px_#2dd4bf] cursor-crosshair hover:scale-150 transition-all"
-                                      onMouseEnter={() => setActiveHotspot(hotspot.label)}
-                                      onMouseLeave={() => setActiveHotspot(null)}
-                                    >
-                                       <div className="absolute -inset-2 rounded-full border border-teal-400/50 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite] pointer-events-none"></div>
-                                    </div>
+                const config = getTactileLabConfig(lesson);
+                const activeCount = Object.values(tactileItems).filter(Boolean).length;
+                const isAllActive = activeCount === 3;
 
-                                    {/* AR Tech Line */}
-                                    <div className="absolute left-1 top-[-1px] w-[25px] h-[1px] bg-teal-400/60 origin-left -rotate-45 pointer-events-none"></div>
-                                    <div className="absolute left-[18px] top-[-18px] w-[60px] h-[1px] bg-teal-400/60 pointer-events-none"></div>
-                                    
-                                    {/* Floating Label */}
-                                    <div className="absolute left-[18px] top-[-34px] whitespace-nowrap text-teal-200 font-mono text-[9px] tracking-widest uppercase drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] pointer-events-none font-bold">
-                                       {hotspot.label}
-                                    </div>
-                                 </div>
-                              ))}
-                           </div>
-
-                           {/* LAYER 2: INTERNAL MECHANISM */}
-                           <div 
-                              className={`absolute inset-0 m-auto w-[450px] h-[450px] rounded-[40px] overflow-hidden shadow-2xl transition-all duration-1000 ${teardownStage >= 2 ? 'opacity-0 scale-150 blur-xl pointer-events-none' : teardownStage === 1 ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'}`}
-                           >
-                              <img src={`https://image.pollinations.ai/prompt/${encodeURIComponent((iTheme as any).layers[1].prompt)}?width=450&height=450&nologo=true&seed=${lessonSeed}`} alt="Mechanism" className="w-full h-full object-cover" />
-                              {/* Hotspots for Layer 2 */}
-                              {teardownStage === 1 && ((iTheme as any).layers[1].hotspots || []).map((hotspot: any, idx: number) => (
-                                 <div 
-                                    key={idx}
-                                    className="absolute z-40"
-                                    style={{ left: `${hotspot.x}%`, top: `${hotspot.y}%` }}
-                                 >
-                                    {/* Center Target */}
-                                    <div 
-                                      className="absolute -ml-1 -mt-1 w-2 h-2 rounded-full bg-teal-400 shadow-[0_0_15px_#2dd4bf] cursor-crosshair hover:scale-150 transition-all"
-                                      onMouseEnter={() => setActiveHotspot(hotspot.label)}
-                                      onMouseLeave={() => setActiveHotspot(null)}
-                                    >
-                                       <div className="absolute -inset-2 rounded-full border border-teal-400/50 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite] pointer-events-none"></div>
-                                    </div>
-
-                                    {/* AR Tech Line */}
-                                    <div className="absolute left-1 top-[-1px] w-[25px] h-[1px] bg-teal-400/60 origin-left -rotate-45 pointer-events-none"></div>
-                                    <div className="absolute left-[18px] top-[-18px] w-[60px] h-[1px] bg-teal-400/60 pointer-events-none"></div>
-                                    
-                                    {/* Floating Label */}
-                                    <div className="absolute left-[18px] top-[-34px] whitespace-nowrap text-teal-200 font-mono text-[9px] tracking-widest uppercase drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] pointer-events-none font-bold">
-                                       {hotspot.label}
-                                    </div>
-                                 </div>
-                              ))}
-                              
-                              {/* Mechanism Plate to click/drag away */}
-                              {teardownStage === 1 && (
-                                 <div 
-                                    className="absolute inset-0 cursor-grab active:cursor-grabbing flex items-center justify-center bg-black/40 hover:bg-black/20 transition-colors border-4 border-dashed border-teal-500/50"
-                                    onPointerDown={(e) => {
-                                       (e.target as HTMLElement).setPointerCapture(e.pointerId);
-                                       setLayerOffset({ x: e.clientX, y: e.clientY });
-                                    }}
-                                    onPointerMove={(e) => {
-                                       if (e.buttons === 1) {
-                                          const dx = e.clientX - layerOffset.x;
-                                          const dy = e.clientY - layerOffset.y;
-                                          if (Math.abs(dx) > 200 || Math.abs(dy) > 200) { // Dragged it far enough
-                                             setTeardownStage(2);
-                                             handleInstrumentChange('teardown_success', true, iTheme);
-                                          }
-                                          (e.currentTarget as HTMLElement).style.transform = `translate(${dx}px, ${dy}px) rotate(${dx*0.1}deg)`;
-                                       }
-                                    }}
-                                    onPointerUp={(e) => {
-                                       if (teardownStage === 1) {
-                                          (e.currentTarget as HTMLElement).style.transform = 'translate(0px, 0px) rotate(0deg)';
-                                       }
-                                    }}
-                                 >
-                                    <span className="text-teal-400 font-mono font-bold tracking-widest text-lg drop-shadow-md bg-black/60 px-6 py-2 rounded-full border border-teal-500 pointer-events-none">DRAG TO REVEAL</span>
-                                 </div>
-                              )}
-                           </div>
-
-                           {/* LAYER 1: OUTER CHASSIS */}
-                           <div 
-                              className={`absolute inset-0 m-auto w-[500px] h-[500px] rounded-[60px] overflow-hidden shadow-[0_30px_60px_rgba(0,0,0,0.9)] transition-all duration-1000 ${teardownStage >= 1 ? 'opacity-0 scale-125 blur-lg pointer-events-none' : 'opacity-100 scale-100'}`}
-                           >
-                              <img src={`https://image.pollinations.ai/prompt/${encodeURIComponent((iTheme as any).layers[0].prompt)}?width=500&height=500&nologo=true&seed=${lessonSeed}`} alt="Chassis" className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(0,0,0,0.8)] border-[6px] border-slate-900/40 rounded-[60px] pointer-events-none"></div>
-                              
-                              {/* Hotspots for Layer 1 */}
-                              {teardownStage === 0 && ((iTheme as any).layers[0].hotspots || []).map((hotspot: any, idx: number) => (
-                                 <div 
-                                    key={idx}
-                                    className="absolute z-40"
-                                    style={{ left: `${hotspot.x}%`, top: `${hotspot.y}%` }}
-                                 >
-                                    {/* Center Target */}
-                                    <div 
-                                      className="absolute -ml-1 -mt-1 w-2 h-2 rounded-full bg-teal-400 shadow-[0_0_15px_#2dd4bf] cursor-crosshair hover:scale-150 transition-all"
-                                      onMouseEnter={() => setActiveHotspot(hotspot.label)}
-                                      onMouseLeave={() => setActiveHotspot(null)}
-                                    >
-                                       <div className="absolute -inset-2 rounded-full border border-teal-400/50 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite] pointer-events-none"></div>
-                                    </div>
-
-                                    {/* AR Tech Line */}
-                                    <div className="absolute left-1 top-[-1px] w-[25px] h-[1px] bg-teal-400/60 origin-left -rotate-45 pointer-events-none"></div>
-                                    <div className="absolute left-[18px] top-[-18px] w-[60px] h-[1px] bg-teal-400/60 pointer-events-none"></div>
-                                    
-                                    {/* Floating Label */}
-                                    <div className="absolute left-[18px] top-[-34px] whitespace-nowrap text-teal-200 font-mono text-[9px] tracking-widest uppercase drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] pointer-events-none font-bold">
-                                       {hotspot.label}
-                                    </div>
-                                 </div>
-                              ))}
-                              
-                              {/* The Screws */}
-                              {teardownStage === 0 && ((iTheme as any).layers[0].screws || []).map((screw: any) => {
-                                 const progress = screwsState[screw.id] || 0;
-                                 const isPopped = progress >= 100;
-                                 
-                                 return (
-                                    <div 
-                                       key={screw.id}
-                                       className={`absolute w-20 h-20 -ml-10 -mt-10 rounded-full flex items-center justify-center transition-all ${isPopped ? 'opacity-0 scale-150 pointer-events-none' : 'cursor-none hover:bg-white/10'}`}
-                                       style={{ left: `${screw.x}%`, top: `${screw.y}%` }}
-                                       onPointerDown={(e) => {
-                                          if (isPopped) return;
-                                          setActiveScrew(screw.id);
-                                          (e.target as HTMLElement).setPointerCapture(e.pointerId);
-                                          setLayerOffset({ x: e.clientX, y: e.clientY }); // Track scrub starting pos
-                                       }}
-                                       onPointerMove={(e) => {
-                                          if (activeScrew === screw.id && e.buttons === 1) {
-                                             const dx = Math.abs(e.clientX - layerOffset.x);
-                                             const dy = Math.abs(e.clientY - layerOffset.y);
-                                             const movement = dx + dy;
-                                             
-                                             if (movement > 10) {
-                                                // Scrubbing adds progress
-                                                setScrewsState(prev => {
-                                                   const newProgress = Math.min(100, (prev[screw.id] || 0) + movement * 0.1);
-                                                   
-                                                   // Check if all screws popped
-                                                   let allPopped = true;
-                                                   for (const s of (iTheme as any).layers[0].screws) {
-                                                      if (s.id === screw.id) {
-                                                         if (newProgress < 100) allPopped = false;
-                                                      } else {
-                                                         if ((prev[s.id] || 0) < 100) allPopped = false;
-                                                      }
-                                                   }
-                                                   
-                                                   if (newProgress >= 100 && allPopped) {
-                                                      setTimeout(() => setTeardownStage(1), 500); // Pop layer
-                                                   }
-                                                   
-                                                   return { ...prev, [screw.id]: newProgress };
-                                                });
-                                                setLayerOffset({ x: e.clientX, y: e.clientY }); // Reset
-                                             }
-                                          }
-                                       }}
-                                       onPointerUp={() => setActiveScrew(null)}
-                                    >
-                                       {/* Physical Screw Graphic */}
-                                       <div 
-                                          className={`w-12 h-12 rounded-full bg-[radial-gradient(circle_at_30%_30%,_#94a3b8,_#334155)] shadow-[0_5px_10px_rgba(0,0,0,0.8),inset_0_-2px_5px_rgba(0,0,0,0.5)] border-2 border-slate-900 flex items-center justify-center`}
-                                          style={{ transform: `rotate(${progress * 15}deg)` }} // Rotates extremely fast as they scrub
-                                       >
-                                          {/* Crosshead / Phillips */}
-                                          <div className="absolute w-8 h-1 bg-slate-900/80 rounded-full shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]"></div>
-                                          <div className="absolute w-1 h-8 bg-slate-900/80 rounded-full shadow-[inset_0_1px_2px_rgba(0,0,0,0.8)]"></div>
-                                       </div>
-                                       
-                                       {/* Active Scrubbing Overlay */}
-                                       {activeScrew === screw.id && !isPopped && (
-                                          <>
-                                             <div className="fixed w-16 h-16 pointer-events-none rounded-full border-4 border-dashed border-teal-400 animate-[spin_1s_linear_infinite]" style={{ left: layerOffset.x - 32, top: layerOffset.y - 32 }}></div>
-                                             <div className="absolute w-24 h-24 rounded-full border-4 border-slate-700/50">
-                                                <div className="absolute bottom-0 left-0 h-full w-full bg-teal-500/30 rounded-full transition-all" style={{ clipPath: `inset(${100 - progress}% 0 0 0)` }}></div>
-                                             </div>
-                                          </>
-                                       )}
-                                    </div>
-                                 );
-                              })}
-                           </div>
-                           
-                        </div>
-                      </div>
-                    )}
-
-                    {/* MODE: MICROSCOPE (Biology) */}
-                    {iTheme.mode === 'microscope' && (
-                      <div className="relative z-10 flex flex-col h-full w-full flex-1">
-                        <div className="text-center mb-8"><h2 className="text-3xl text-emerald-400 font-black font-heading tracking-wider uppercase drop-shadow-md">{iTheme.title}</h2></div>
-                        <div className="flex-1 flex flex-col md:flex-row gap-12 items-center justify-center">
-                          {(() => {
-                            const focus = (instrumentValues['focus'] as number) ?? 100;
-                            const panX = (instrumentValues['panX'] as number) ?? 0;
-                            const panY = (instrumentValues['panY'] as number) ?? 0;
-                            const blurAmount = Math.abs(focus - 400) / 20;
-                            return (
-                              <>
-                                <div className="w-80 h-80 md:w-96 md:h-96 rounded-full border-[12px] border-slate-800 bg-black shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden relative cursor-crosshair">
-                                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-900/40 to-transparent pointer-events-none z-20"></div>
-                                  <div className="w-full h-full flex items-center justify-center transition-all duration-75" style={{ filter: `blur(${blurAmount}px)`, transform: `translate(${(panX - 50) * 2}px, ${(panY - 50) * 2}px)` }}>
-                                    <div className="w-32 h-32 bg-emerald-500/30 rounded-[40%_60%_70%_30%/40%_50%_60%_50%] animate-[pulse_4s_infinite] border-2 border-emerald-400 flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.4)]">
-                                      <div className="w-8 h-8 bg-purple-500/50 rounded-full blur-[2px]"></div>
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="flex flex-col gap-6 w-full max-w-[280px]">
-                                  <div className="bg-black/60 p-6 rounded-3xl border border-slate-700 shadow-xl backdrop-blur-md">
-                                    <p className="text-emerald-400 font-mono text-sm mb-4 text-center font-bold">FINE FOCUS</p>
-                                    <input type="range" min="100" max="1000" step="10" value={focus} onChange={e => handleInstrumentChange('focus', parseFloat(e.target.value), iTheme)} className="w-full h-4 bg-slate-800 rounded-full appearance-none cursor-pointer border border-emerald-900 accent-emerald-500 hover:accent-emerald-400 transition-all" />
-                                  </div>
-                                  <div className="bg-black/60 p-6 rounded-3xl border border-slate-700 shadow-xl backdrop-blur-md space-y-6">
-                                    <p className="text-emerald-400 font-mono text-sm text-center font-bold">STAGE PAN (X / Y)</p>
-                                    <input type="range" min="0" max="100" value={panX} onChange={e => handleInstrumentChange('panX', parseFloat(e.target.value), iTheme)} className="w-full h-2 rounded-full appearance-none bg-slate-800 accent-emerald-500" />
-                                    <input type="range" min="0" max="100" value={panY} onChange={e => handleInstrumentChange('panY', parseFloat(e.target.value), iTheme)} className="w-full h-2 rounded-full appearance-none bg-slate-800 accent-emerald-500" />
-                                  </div>
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* MODE: ORBITAL (Space) */}
-                    {iTheme.mode === 'orbital' && (
-                      <div className="relative z-10 flex flex-col h-full w-full flex-1">
-                        <div className="text-center mb-8"><h2 className="text-3xl text-amber-400 font-black font-heading tracking-wider uppercase drop-shadow-md">{iTheme.title}</h2></div>
-                        <div className="flex-1 flex flex-col md:flex-row gap-12 items-center justify-center">
-                          {(() => {
-                            const grav = (instrumentValues['grav'] as number) ?? 0;
-                            const vel = (instrumentValues['vel'] as number) ?? 0;
-                            const thruster = (instrumentValues['thruster'] as boolean) ?? false;
-                            const orbitSize = Math.max(50, vel * 2 + grav * 15);
-                            const isMatched = Math.abs(grav - 9.8) <= 0.1 && Math.abs(vel - 75) <= 1 && thruster;
-                            return (
-                              <>
-                                <div className="w-80 h-80 md:w-96 md:h-96 rounded-[3rem] border-4 border-slate-700 bg-slate-950 shadow-[inset_0_0_50px_rgba(0,0,0,0.9)] relative overflow-hidden flex items-center justify-center bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/10 to-transparent">
-                                  <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:20px_20px]"></div>
-                                  <div className="w-16 h-16 bg-gradient-to-br from-yellow-300 to-amber-600 rounded-full shadow-[0_0_40px_#f59e0b] z-20 border border-amber-300"></div>
-                                  <div className="absolute w-[297px] h-[297px] border-2 border-dashed border-white/20 rounded-full"></div>
-                                  <div className={`absolute border-2 rounded-full transition-all duration-300 ${thruster ? 'animate-[spin_4s_linear_infinite]' : ''}`} style={{ width: `${orbitSize}px`, height: `${orbitSize}px`, borderColor: isMatched ? '#10b981' : '#3b82f6' }}>
-                                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 bg-gradient-to-br from-blue-300 to-blue-600 rounded-full shadow-[0_0_15px_#60a5fa] border border-blue-200"></div>
-                                  </div>
-                                </div>
-                                <div className="flex flex-col gap-6 w-full max-w-[280px]">
-                                  <div className="bg-black/60 p-5 rounded-2xl border border-slate-700 backdrop-blur-md">
-                                    <p className="text-amber-400 font-mono text-xs mb-3 font-bold">GRAVITY WELL (m/s²)</p>
-                                    <input type="range" min="0" max="20" step="0.1" value={grav} onChange={e => handleInstrumentChange('grav', parseFloat(e.target.value), iTheme)} className="w-full h-3 rounded-full appearance-none bg-slate-800 accent-amber-500 hover:accent-amber-400 transition-all cursor-pointer" />
-                                    <p className="text-right text-slate-500 font-mono text-[10px] mt-1">{grav.toFixed(1)}</p>
-                                  </div>
-                                  <div className="bg-black/60 p-5 rounded-2xl border border-slate-700 backdrop-blur-md">
-                                    <p className="text-blue-400 font-mono text-xs mb-3 font-bold">ORBITAL VELOCITY (km/s)</p>
-                                    <input type="range" min="0" max="100" step="1" value={vel} onChange={e => handleInstrumentChange('vel', parseFloat(e.target.value), iTheme)} className="w-full h-3 rounded-full appearance-none bg-slate-800 accent-blue-500 hover:accent-blue-400 transition-all cursor-pointer" />
-                                    <p className="text-right text-slate-500 font-mono text-[10px] mt-1">{vel}</p>
-                                  </div>
-                                  <div className="bg-black/60 p-5 rounded-2xl border border-slate-700 backdrop-blur-md flex flex-col items-center">
-                                    <p className="text-red-400 font-mono text-xs mb-4 font-bold">MAIN THRUSTER</p>
-                                    <div onClick={() => handleInstrumentChange('thruster', !thruster, iTheme)} className={`w-20 h-10 rounded-full border-2 cursor-pointer transition-colors relative ${thruster ? 'bg-red-500 border-red-300 shadow-[0_0_20px_rgba(239,68,68,0.5)]' : 'bg-slate-800 border-slate-600'}`}>
-                                      <div className={`absolute top-1 w-7 h-7 bg-white rounded-full transition-transform shadow-md ${thruster ? 'translate-x-11' : 'translate-x-1'}`}></div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* MODE: PHYSICS */}
-                    {iTheme.mode === 'physics' && (
-                      <div className="relative z-10 flex flex-col h-full w-full flex-1">
-                        <div className="text-center mb-8"><h2 className="text-3xl text-indigo-400 font-black font-heading tracking-wider uppercase drop-shadow-md">{iTheme.title}</h2></div>
-                        <div className="flex-1 flex flex-col md:flex-row gap-12 items-center justify-center">
-                          {(() => {
-                            const mass = (instrumentValues['mass'] as number) ?? 10;
-                            const force = (instrumentValues['force'] as number) ?? 0;
-                            const friction = (instrumentValues['friction'] as number) ?? 0;
-                            const netForce = Math.max(0, force - friction);
-                            const acceleration = mass > 0 ? (netForce / mass) * 10 : 0;
-                            const isMatched = Math.abs(mass - 50) <= 2 && Math.abs(force - 80) <= 2 && Math.abs(friction - 10) <= 2;
-                            return (
-                              <>
-                                <div className="w-80 h-80 md:w-96 md:h-96 rounded-2xl border-4 border-slate-700 bg-slate-900 shadow-[inset_0_0_50px_rgba(0,0,0,0.9)] relative overflow-hidden flex items-center justify-center bg-[linear-gradient(to_right,#1e1e1e_1px,transparent_1px),linear-gradient(to_bottom,#1e1e1e_1px,transparent_1px)] bg-[size:40px_40px]">
-                                  {/* Floor */}
-                                  <div className="absolute bottom-0 w-full h-1/3 bg-slate-800 border-t-2 border-slate-700 flex items-center justify-center">
-                                     {friction > 0 && <div className="absolute top-0 left-0 w-full h-2 bg-amber-900/40"></div>}
-                                  </div>
-                                  
-                                  {/* The Mass Block */}
-                                  <div className="absolute transition-all duration-300 flex items-center justify-center" style={{ 
-                                      width: `${40 + mass}px`, 
-                                      height: `${40 + mass}px`, 
-                                      bottom: '33.333%',
-                                      left: `${20 + (acceleration * 2)}%`,
-                                      backgroundColor: isMatched ? '#10b981' : '#6366f1',
-                                      boxShadow: isMatched ? '0 0 30px rgba(16,185,129,0.5)' : 'none'
-                                  }}>
-                                     <span className="text-white font-bold text-xs">{mass}kg</span>
-                                     
-                                     {/* Force Arrow */}
-                                     {force > 0 && (
-                                        <div className="absolute left-full top-1/2 -translate-y-1/2 flex items-center ml-2 pointer-events-none">
-                                           <div className="bg-red-500 h-2" style={{ width: `${force}px` }}></div>
-                                           <div className="w-0 h-0 border-t-4 border-t-transparent border-b-4 border-b-transparent border-l-8 border-l-red-500"></div>
-                                        </div>
-                                     )}
-                                     
-                                     {/* Friction Arrow */}
-                                     {friction > 0 && (
-                                        <div className="absolute right-full bottom-0 flex items-center mr-2 pointer-events-none">
-                                           <div className="w-0 h-0 border-t-2 border-t-transparent border-b-2 border-b-transparent border-r-4 border-r-amber-500"></div>
-                                           <div className="bg-amber-500 h-1" style={{ width: `${friction}px` }}></div>
-                                        </div>
-                                     )}
-                                  </div>
-                                </div>
-                                <div className="flex flex-col gap-4 w-full max-w-[280px]">
-                                  <div className="bg-black/60 p-4 rounded-xl border border-slate-700 backdrop-blur-md">
-                                    <p className="text-indigo-400 font-mono text-[10px] mb-2 font-bold">MASS (kg)</p>
-                                    <input type="range" min="1" max="100" step="1" value={mass} onChange={e => handleInstrumentChange('mass', parseFloat(e.target.value), iTheme)} className="w-full h-2 rounded-full appearance-none bg-slate-800 accent-indigo-500" />
-                                  </div>
-                                  <div className="bg-black/60 p-4 rounded-xl border border-slate-700 backdrop-blur-md">
-                                    <p className="text-red-400 font-mono text-[10px] mb-2 font-bold">APPLIED FORCE (N)</p>
-                                    <input type="range" min="0" max="100" step="1" value={force} onChange={e => handleInstrumentChange('force', parseFloat(e.target.value), iTheme)} className="w-full h-2 rounded-full appearance-none bg-slate-800 accent-red-500" />
-                                  </div>
-                                  <div className="bg-black/60 p-4 rounded-xl border border-slate-700 backdrop-blur-md">
-                                    <p className="text-amber-400 font-mono text-[10px] mb-2 font-bold">FRICTION (N)</p>
-                                    <input type="range" min="0" max="50" step="1" value={friction} onChange={e => handleInstrumentChange('friction', parseFloat(e.target.value), iTheme)} className="w-full h-2 rounded-full appearance-none bg-slate-800 accent-amber-500" />
-                                  </div>
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Excellence Blast Overlay */}
-                    {tactileSuccess && (
-                      <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/80 backdrop-blur-md animate-in fade-in zoom-in duration-300">
-                        <div className="text-center space-y-4">
-                          <h2 className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200 animate-[pulse_1s_infinite] drop-shadow-[0_0_20px_rgba(52,211,153,0.8)] font-heading uppercase tracking-widest scale-150">
-                            EXCELLENCE!
-                          </h2>
-                          <p className="mt-8 text-xl font-bold text-white tracking-widest uppercase bg-teal-900/80 px-8 py-3 rounded-full border border-teal-500 shadow-[0_0_30px_rgba(20,184,166,0.5)]">
-                            {iTheme.successText}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
+                return <TactilePhysicsSandbox config={config} tactileItems={tactileItems} setTactileItems={setTactileItems} playTactileTone={playTactileTone} isCompleted={isCompleted} handleCompleteLesson={handleCompleteLesson} />;
               })()}
             </TabsContent>
 
             {/* TAB: KINESTHETIC ARENA */}
             <TabsContent value="kinesthetic" className="mt-0 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div 
-                onMouseMove={(e) => {
+                onPointerMove={(e) => {
                   if (!isWebcamActive) return;
                   const rect = e.currentTarget.getBoundingClientRect();
                   const x = ((e.clientX - rect.left) / rect.width) * 100;
                   const y = ((e.clientY - rect.top) / rect.height) * 100;
-                  setArCursor({ x: Math.max(5, Math.min(95, x)), y: Math.max(5, Math.min(95, y)) });
+                  const clampedX = Math.max(5, Math.min(95, x));
+                  const clampedY = Math.max(5, Math.min(95, y));
+                  smoothArCursorRef.current = { x: clampedX, y: clampedY };
+                  setArCursor({ x: clampedX, y: clampedY });
                 }}
                 className={`p-8 border border-border/60 rounded-3xl bg-black overflow-hidden relative min-h-[500px] flex flex-col items-center justify-center shadow-2xl transition-all duration-500 ${isWebcamActive ? '!fixed !inset-0 !z-[9999] !w-[100vw] !h-[100vh] !rounded-none !border-none !m-0 !p-0 !max-w-none cursor-crosshair' : ''}`}
               >
@@ -1276,22 +2023,33 @@ export default function LessonViewerPage() {
                 {/* Major Screen Background (Virtual Environment) */}
                 <div className={`w-full h-full absolute inset-0 transition-opacity duration-500 ${isWebcamActive ? 'opacity-100 z-0' : 'opacity-0 pointer-events-none -z-10'} ${getTactileTheme(lesson).bgClass}`}>
                   
-                  {/* The PIP Camera Feed (Rendered only when active camera stream exists) */}
-                  {hasCameraStream && (
-                    <div className="absolute bottom-8 left-8 w-64 h-48 bg-black rounded-3xl border-2 border-white/20 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] z-50">
-                      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-                      
-                      {/* LIVE TRACKING DEBUGGER */}
-                      <div className="absolute pointer-events-none w-6 h-6 rounded-full border-[3px] border-red-500 flex items-center justify-center transition-all duration-75 z-50 shadow-[0_0_15px_red]" style={{ left: `${arCursor.x}%`, top: `${arCursor.y}%`, transform: 'translate(-50%, -50%)' }}>
-                         <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
-                      </div>
-                      
-                      <div className="absolute top-3 left-3 bg-black/60 px-2 py-1 rounded-md text-[10px] text-teal-400 font-mono flex items-center gap-2 border border-white/10 backdrop-blur-md">
-                        <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                        CAMERA SENSOR FEED
-                      </div>
+                  {/* The PIP Camera Feed */}
+                  <div className={`absolute bottom-8 left-8 w-64 h-48 bg-black rounded-3xl border-2 border-teal-500/40 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] z-50 transition-all duration-300 ${hasCameraStream ? 'opacity-100 scale-100' : 'opacity-0 pointer-events-none'}`}>
+                    <video 
+                      ref={(el) => {
+                        videoRef.current = el;
+                        if (el && cameraStream && el.srcObject !== cameraStream) {
+                          el.srcObject = cameraStream;
+                          el.onloadedmetadata = () => { el.play().catch(() => {}); };
+                          el.play().catch(() => {});
+                        }
+                      }} 
+                      autoPlay 
+                      playsInline 
+                      muted 
+                      className="w-full h-full object-cover scale-x-[-1]" 
+                    />
+                    
+                    {/* LIVE TRACKING DEBUGGER */}
+                    <div className="absolute pointer-events-none w-6 h-6 rounded-full border-[3px] border-red-500 flex items-center justify-center z-50 shadow-[0_0_15px_red] will-change-transform" style={{ left: `${arCursor.x}%`, top: `${arCursor.y}%`, transform: 'translate(-50%, -50%)' }}>
+                       <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
                     </div>
-                  )}
+                    
+                    <div className="absolute top-3 left-3 bg-black/60 px-2 py-1 rounded-md text-[10px] text-teal-400 font-mono flex items-center gap-2 border border-white/10 backdrop-blur-md">
+                      <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                      CAMERA SENSOR FEED
+                    </div>
+                  </div>
                   <canvas ref={hiddenCanvasRef} width={160} height={120} className="hidden" />
                   
                   {/* AR OVERLAY AND GAME LOGIC */}
@@ -1334,7 +2092,7 @@ export default function LessonViewerPage() {
                           return (
                             <div 
                               key={`target-${target.id}`}
-                              className={`absolute w-32 h-32 rounded-3xl border-4 border-dashed flex flex-col items-center justify-center transition-all duration-500 ${isPlaced ? 'border-emerald-500 bg-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.4)] scale-110' : 'border-white/40 bg-black/20'}`}
+                              className={`absolute w-32 h-32 rounded-3xl border-4 border-dashed flex flex-col items-center justify-center transition-all duration-300 ${isPlaced ? 'border-emerald-500 bg-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.4)] scale-110' : 'border-white/40 bg-black/20'}`}
                               style={{ left: `${target.x}%`, top: `${target.y}%`, transform: 'translate(-50%, -50%)' }}
                             >
                               {isPlaced ? (
@@ -1370,7 +2128,7 @@ export default function LessonViewerPage() {
                         {/* Picked Item Attached to Cursor */}
                         {!arExplosion && arPickedItem !== null && (
                           <div 
-                            className="absolute w-28 h-28 rounded-2xl flex flex-col items-center justify-center pointer-events-none transition-all duration-75"
+                            className="absolute w-28 h-28 rounded-2xl flex flex-col items-center justify-center pointer-events-none will-change-transform"
                             style={{ left: `${arCursor.x}%`, top: `${arCursor.y}%`, transform: 'translate(-50%, -50%)' }}
                           >
                             <div className={`w-20 h-20 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(255,255,255,0.4)] border-4 border-white animate-[pulse_1s_infinite] ${getColorClasses(theme.items[arPickedItem].color)}`}>
@@ -1382,10 +2140,10 @@ export default function LessonViewerPage() {
                         {/* AR Cursor (The Virtual Hand) */}
                         {!arExplosion && (
                           <div 
-                            className="absolute w-24 h-24 pointer-events-none transition-all duration-75 ease-out z-40"
+                            className="absolute w-24 h-24 pointer-events-none z-40 will-change-transform"
                             style={{ left: `${arCursor.x}%`, top: `${arCursor.y}%`, transform: 'translate(-50%, -50%)' }}
                           >
-                            <Hand className={`w-16 h-16 transition-colors duration-300 drop-shadow-[0_0_20px_rgba(45,212,191,0.8)] ${arPickedItem !== null ? 'text-amber-400 scale-90' : 'text-teal-400'}`} />
+                            <Hand className={`w-16 h-16 transition-colors duration-200 drop-shadow-[0_0_20px_rgba(45,212,191,0.8)] ${arPickedItem !== null ? 'text-amber-400 scale-90' : 'text-teal-400'}`} />
                             {arPickedItem === null && <span className="absolute -bottom-2 left-4 whitespace-nowrap text-[10px] font-bold text-teal-300 drop-shadow-md bg-black/50 px-2 py-1 rounded">VIRTUAL HAND</span>}
                           </div>
                         )}

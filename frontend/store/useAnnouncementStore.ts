@@ -33,10 +33,14 @@ export const useAnnouncementStore = create<AnnouncementStore>()(
           createdAt: new Date().toISOString(),
         }
       ],
-      addAnnouncement: (announcement) =>
+      addAnnouncement: (announcement) => {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('newAnnouncementPublished', { detail: announcement }));
+        }
         set((state) => ({
           announcements: [announcement, ...state.announcements],
-        })),
+        }));
+      },
       togglePin: (id) =>
         set((state) => ({
           announcements: state.announcements.map((a) =>

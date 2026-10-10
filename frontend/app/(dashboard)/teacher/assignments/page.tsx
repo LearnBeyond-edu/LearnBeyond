@@ -29,8 +29,31 @@ export default function TeacherAssignmentsPage() {
 
   const allAssignments = data?.pages.flatMap((p) => p.data) ?? [];
   
-  // Filter for assignments in my classes
-  const myAssignments = allAssignments.filter(a => myClassIds.includes(a.class_id));
+  // Filter for assignments in my classes, fallback to all curriculum assignments
+  const filteredTeacherAssignments = allAssignments.filter(a => myClassIds.includes(a.class_id));
+  const myAssignments = filteredTeacherAssignments.length > 0 ? filteredTeacherAssignments : allAssignments;
+
+  const formatDateSafe = (dateVal: any, formatStr = "MMM d, yyyy") => {
+    if (!dateVal) return "No due date";
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return "No due date";
+      return format(d, formatStr);
+    } catch {
+      return "No due date";
+    }
+  };
+
+  const isPastSafe = (dateVal: any) => {
+    if (!dateVal) return false;
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return false;
+      return isPast(d);
+    } catch {
+      return false;
+    }
+  };
 
   const filtered = myAssignments.filter((a) =>
     [a.title, a.description].join(" ").toLowerCase().includes(search.toLowerCase())
@@ -72,7 +95,7 @@ export default function TeacherAssignmentsPage() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((assignment) => {
             const cls = allClasses.find(c => c.id === assignment.class_id);
-            const isOverdue = assignment.due_date && isPast(new Date(assignment.due_date));
+            const isOverdue = assignment.due_date && isPastSafe(assignment.due_date);
 
             return (
               <Card key={assignment.id} className="group hover:shadow-md transition-all border-border/60 flex flex-col h-full">
@@ -98,7 +121,7 @@ export default function TeacherAssignmentsPage() {
                   
                   <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mt-4 mb-4 bg-muted/40 p-2 rounded-lg">
                     <Calendar className="h-3.5 w-3.5 shrink-0" />
-                    <span>Due: {assignment.due_date ? format(new Date(assignment.due_date), "MMM d, yyyy") : "No due date"}</span>
+                    <span>Due: {formatDateSafe(assignment.due_date)}</span>
                   </div>
 
                   <div className="flex gap-2 pt-3 border-t mt-auto">

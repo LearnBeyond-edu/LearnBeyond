@@ -29,12 +29,23 @@ export default function TeacherStudentProfilePage({ params }: { params: Promise<
   if (isStudentLoading) return <TableSkeleton rows={5} cols={2} />;
   if (!student) return <ErrorState error="Student data not available" onRetry={refetch} />;
 
+  const formatDateSafe = (dateVal: any, formatStr = "MMM d, yyyy") => {
+    if (!dateVal) return "Recent";
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return "Recent";
+      return format(d, formatStr);
+    } catch {
+      return "Recent";
+    }
+  };
+
   const allProgress = progressData?.pages.flatMap((p: any) => p.data) ?? [];
   const allSubmissions = submissionsData?.pages.flatMap((p: any) => p.data) ?? [];
   const allParents = parentsData?.pages.flatMap((p: any) => p.data) ?? [];
 
   const studentProgress = allProgress; // Already filtered by hook
-  const studentParents = allParents.filter((p: any) => p.student_id === student.user_id);
+  const studentParents = allParents.filter((p: any) => p.student_id === student?.user_id || p.student_id === student?.id);
 
   const quizSubmissions = allSubmissions.filter((s: any) => s.assessment_type === "quiz");
   const assignmentSubmissions = allSubmissions.filter((s: any) => s.assessment_type !== "quiz");
@@ -42,7 +53,7 @@ export default function TeacherStudentProfilePage({ params }: { params: Promise<
       ? Math.round(quizSubmissions.reduce((acc: any, curr: any) => acc + (curr.score || 0), 0) / quizSubmissions.length)
       : 0;
 
-  const fullName = [student.first_name, student.last_name].filter(Boolean).join(" ") || `Student ${id.slice(0, 6)}`;
+  const fullName = [student?.first_name, student?.last_name].filter(Boolean).join(" ") || `Student ${(student?.id || id || "").slice(0, 6)}`;
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -60,14 +71,14 @@ export default function TeacherStudentProfilePage({ params }: { params: Promise<
           <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
             <Avatar className="h-20 w-20 ring-4 ring-background">
               <AvatarFallback className="text-2xl font-bold bg-emerald-500/10 text-emerald-600">
-                {(student.first_name?.[0] ?? "S").toUpperCase()}{(student.last_name?.[0] ?? "").toUpperCase()}
+                {(student?.first_name?.[0] ?? "S").toUpperCase()}{(student?.last_name?.[0] ?? "").toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0 grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
               {[
                 { icon: <GraduationCap className="h-4 w-4" />, label: "Full Name", value: fullName },
-                { icon: <Mail className="h-4 w-4" />, label: "Student ID", value: student.id.slice(0, 8).toUpperCase() },
-                { icon: <Calendar className="h-4 w-4" />, label: "Enrolled", value: format(new Date(student.created_at), "MMM yyyy") },
+                { icon: <Mail className="h-4 w-4" />, label: "Student ID", value: (student?.id || id || "").slice(0, 8).toUpperCase() },
+                { icon: <Calendar className="h-4 w-4" />, label: "Enrolled", value: formatDateSafe(student?.created_at, "MMM yyyy") },
                 { icon: <BrainCircuit className="h-4 w-4" />, label: "Learning Style", value: "Visual-Kinesthetic" },
               ].map(({ icon, label, value }) => (
                 <div key={label} className="flex flex-col gap-1 p-3 rounded-xl bg-muted/40 border border-border/50">
@@ -120,14 +131,14 @@ export default function TeacherStudentProfilePage({ params }: { params: Promise<
                       <div className="flex items-center gap-3">
                         <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${prog.status === "completed" ? "bg-green-500 shadow-green-500/20" : prog.status === "in_progress" ? "bg-yellow-500 shadow-yellow-500/20" : "bg-muted"}`} />
                         <div>
-                          <p className="text-sm font-semibold font-mono">Lesson {prog.lesson_id.slice(0, 8)}</p>
-                          <p className="text-xs text-muted-foreground">{format(new Date(prog.updated_at), "MMM d, yyyy")}</p>
+                          <p className="text-sm font-semibold font-mono">Lesson {(prog.lesson_id || "").slice(0, 8) || "N/A"}</p>
+                          <p className="text-xs text-muted-foreground">{formatDateSafe(prog.updated_at)}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">
                         {prog.completion_percentage !== null && <span className="text-sm font-bold">{prog.completion_percentage}%</span>}
                         <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${prog.status === "completed" ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"}`}>
-                          {prog.status.replace("_", " ")}
+                          {(prog.status || "active").replace("_", " ")}
                         </span>
                       </div>
                     </div>
@@ -150,8 +161,8 @@ export default function TeacherStudentProfilePage({ params }: { params: Promise<
                       <div className="flex items-center gap-3">
                         <div className="w-2.5 h-2.5 rounded-full shadow-sm bg-violet-500 shadow-violet-500/20" />
                         <div>
-                          <p className="text-sm font-semibold font-mono">Assignment {sub.assessment_id?.slice(0, 8) || sub.assignment_id?.slice(0, 8)}</p>
-                          <p className="text-xs text-muted-foreground">{format(new Date(sub.created_at), "MMM d, yyyy")}</p>
+                          <p className="text-sm font-semibold font-mono">Assignment {(sub.assessment_id || sub.assignment_id || "").slice(0, 8) || "N/A"}</p>
+                          <p className="text-xs text-muted-foreground">{formatDateSafe(sub.created_at)}</p>
                         </div>
                       </div>
                       <span className="text-sm font-bold text-violet-500">{sub.status || "Submitted"}</span>
@@ -175,8 +186,8 @@ export default function TeacherStudentProfilePage({ params }: { params: Promise<
                       <div className="flex items-center gap-3">
                         <div className="w-2.5 h-2.5 rounded-full shadow-sm bg-orange-500 shadow-orange-500/20" />
                         <div>
-                          <p className="text-sm font-semibold font-mono">Quiz {sub.assessment_id?.slice(0, 8)}</p>
-                          <p className="text-xs text-muted-foreground">{format(new Date(sub.created_at), "MMM d, yyyy")}</p>
+                          <p className="text-sm font-semibold font-mono">Quiz {(sub.assessment_id || "").slice(0, 8) || "N/A"}</p>
+                          <p className="text-xs text-muted-foreground">{formatDateSafe(sub.created_at)}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-4">

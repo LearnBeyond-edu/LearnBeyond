@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useLearningStore } from "@/store/useLearningStore";
-import { useCreateSubmission } from "@/hooks/useSchool";
+import { useCreateSubmission, useSubmissions } from "@/hooks/useSchool";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,14 @@ export default function AssignmentSubmissionPage() {
   const { addXp, addCoins, logActivity } = useLearningStore();
   const createSubmission = useCreateSubmission();
 
+  const { data: submissionsData } = useSubmissions({}, 100);
+  const allSubmissions = submissionsData?.pages?.flatMap(p => p.data) || [];
+  const existingSubmission = allSubmissions.find(s => 
+    (s.assignment_id === assignmentId || s.assessment_id === assignmentId) && 
+    (s.student_id === user?.id || (user?.firstName && s.student_name?.toLowerCase().includes(user.firstName.toLowerCase())))
+  );
+  const isCompleted = !!existingSubmission;
+
   const [status, setStatus] = useState<"pending" | "submitted" | "graded">("pending");
   const [submissionText, setSubmissionText] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -34,6 +42,15 @@ export default function AssignmentSubmissionPage() {
   const [aiFeedback, setAiFeedback] = useState<string | null>(null);
   const [score, setScore] = useState<number | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
+
+  useEffect(() => {
+    if (existingSubmission) {
+      setStatus(existingSubmission.status as any || "graded");
+      setScore(existingSubmission.score ?? 95);
+      if (existingSubmission.feedback) setTeacherFeedback(existingSubmission.feedback);
+      if (existingSubmission.content) setSubmissionText(existingSubmission.content);
+    }
+  }, [existingSubmission]);
 
   const [comments, setComments] = useState<{ sender: string; text: string; time: string }[]>([
     { sender: "Teacher", text: "Please make sure to cite at least three sources in your lab report.", time: "Yesterday" }
@@ -103,34 +120,38 @@ export default function AssignmentSubmissionPage() {
       return;
     }
 
-    setStatus("submitted");
-    addXp(200);
-    addCoins(30);
-    logActivity("Submitted Assignment", "assignment", 100);
-    toast.success("Homework submitted! Gained 200 XP! 🎉");
+    if (!isCompleted) {
+      setStatus("submitted");
+      addXp(200);
+      addCoins(30);
+      logActivity("Submitted Assignment", "assignment", 100);
+      toast.success("Homework submitted! Gained 200 XP! 🎉");
 
-    // Save submission to database
-    if (assignmentId && user) {
-      createSubmission.mutate({
-        student_id: user.id,
-        student_name: user.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Alex Johnson",
-        assessment_type: "assignment",
-        assessment_id: assignmentId,
-        assignment_id: assignmentId,
-        content: submissionText || "Submitted with files",
-        files: uploadedFiles.map(f => f.name),
-        status: "submitted",
-        score: 95
-      });
+      // Save submission to database
+      if (assignmentId && user) {
+        createSubmission.mutate({
+          student_id: user.id,
+          student_name: user.firstName ? `${user.firstName} ${user.lastName || ""}`.trim() : "Alex Johnson",
+          assessment_type: "assignment",
+          assessment_id: assignmentId,
+          assignment_id: assignmentId,
+          content: submissionText || "Submitted with files",
+          files: uploadedFiles.map(f => f.name),
+          status: "submitted",
+          score: 95
+        });
+      }
+
+      // Simulate grading 5 seconds later
+      setTimeout(() => {
+        setStatus("graded");
+        setScore(95);
+        setTeacherFeedback("Excellent report! Very neat diagrams and detailed analysis.");
+        toast.success("Assignment graded! Final score: 95/100!");
+      }, 3000);
+    } else {
+      toast.info(`Revision submitted! Your first attempt score (${existingSubmission?.score ?? score ?? 95}/100) is considered for evaluation and display to parents and staff.`);
     }
-
-    // Simulate grading 5 seconds later
-    setTimeout(() => {
-      setStatus("graded");
-      setScore(95);
-      setTeacherFeedback("Excellent report! Very neat diagrams and detailed analysis.");
-      toast.success("Assignment graded! Final score: 95/100!");
-    }, 5000);
   };
 
   return (
@@ -142,11 +163,9 @@ export default function AssignmentSubmissionPage() {
           <ArrowLeft className="h-4 w-4" /> Back to List
         </Button>
         <div className="flex gap-2">
-          {status === "pending" && (
-            <Button onClick={handleSubmitWork} className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 dark:text-black text-white rounded-xl h-9 text-xs font-bold gap-1.5 shadow-sm transition-all">
-              <Send className="h-4 w-4" /> Submit Homework
-            </Button>
-          )}
+          <Button onClick={handleSubmitWork} className="bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 dark:text-black text-white rounded-xl h-9 text-xs font-bold gap-1.5 shadow-sm transition-all">
+            <Send className="h-4 w-4" /> {isCompleted ? "Resubmit (Practice Mode)" : "Submit Homework"}
+          </Button>
           {status === "submitted" && (
             <Badge className="bg-amber-500/10 text-amber-600 border-none font-bold text-xs py-1.5 px-3 rounded-lg flex items-center gap-1.5">
               <Clock className="h-4 w-4" /> Pending Grading
@@ -173,10 +192,20 @@ export default function AssignmentSubmissionPage() {
               <CardDescription className="text-xs font-medium text-muted-foreground">Draft your response directly or upload required assignment files.</CardDescription>
             </CardHeader>
             <CardContent className="p-6 space-y-4 text-xs">
+              {isCompleted && (
+                <div className="bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 p-4 rounded-2xl text-xs font-medium space-y-1.5">
+                  <div className="flex items-center gap-2 font-bold text-sm text-amber-800 dark:text-amber-300">
+                    <CheckCircle className="w-4 h-4 text-amber-600" /> Already Attempted (First Score: {existingSubmission?.score ?? score ?? 95}/100)
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">
+                    You have already submitted this assignment. You can try again to practice, but your first attempt is considered for evaluation and display to parents and staff.
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-1.5">
                 <label className="font-semibold">Text Submission Response</label>
                 <Textarea
-                  disabled={status !== "pending"}
                   placeholder="Type your homework writeups here..."
                   value={submissionText}
                   onChange={e => setSubmissionText(e.target.value)}
@@ -185,20 +214,18 @@ export default function AssignmentSubmissionPage() {
               </div>
 
               {/* Upload panel */}
-              {status === "pending" && (
-                <div
-                  onDragOver={handleDragOver}
-                  onDrop={handleDrop}
-                  className="group border-2 border-dashed border-teal-500/30 rounded-2xl p-8 text-center bg-teal-500/5 hover:bg-teal-500/10 transition-all flex flex-col items-center justify-center cursor-pointer relative overflow-hidden"
-                >
-                  <Input type="file" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={handleFileChange} />
-                  <div className="p-4 bg-teal-500/10 rounded-full mb-3 group-hover:scale-110 transition-transform">
-                    <Upload className="h-6 w-6 text-teal-600" />
-                  </div>
-                  <p className="font-extrabold text-sm text-foreground">Click or drag files to upload</p>
-                  <p className="text-xs text-muted-foreground mt-1.5">Supports PDF, DOCX, PNG (Max 5MB)</p>
+              <div
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                className="group border-2 border-dashed border-teal-500/30 rounded-2xl p-8 text-center bg-teal-500/5 hover:bg-teal-500/10 transition-all flex flex-col items-center justify-center cursor-pointer relative overflow-hidden"
+              >
+                <Input type="file" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={handleFileChange} />
+                <div className="p-4 bg-teal-500/10 rounded-full mb-3 group-hover:scale-110 transition-transform">
+                  <Upload className="h-6 w-6 text-teal-600" />
                 </div>
-              )}
+                <p className="font-extrabold text-sm text-foreground">Click or drag files to upload</p>
+                <p className="text-xs text-muted-foreground mt-1.5">Supports PDF, DOCX, PNG (Max 5MB)</p>
+              </div>
 
               {/* Uploaded items list */}
               {uploadedFiles.length > 0 && (
