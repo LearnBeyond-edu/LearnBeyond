@@ -27,6 +27,7 @@ const studentRoutes = require('./studentRoutes');
 const staffRoutes = require('./staffRoutes');
 const parentRoutes = require('./parentRoutes');
 const therapistRoutes = require('./therapistRoutes');
+const messageRoutes = require('./messageRoutes');
 
 // We will add more routes here as we implement other domains like
 router.use('/assignments', assignmentRoutes);
@@ -44,6 +45,7 @@ router.use('/student_profiles', studentRoutes);
 router.use('/staff_profiles', staffRoutes);
 router.use('/parent_profiles', parentRoutes);
 router.use('/therapist_profiles', therapistRoutes);
+router.use('/messages', messageRoutes);
  
 // assignments, submissions, quizzes, progress, attendance, etc.
 

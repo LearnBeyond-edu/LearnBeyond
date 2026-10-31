@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useStudents, useParents, useClasses, useTeachers } from "@/hooks/useSchool";
-import { notificationService } from "@/services/platformService";
+import { messageService, DirectMessage } from "@/services/messageService";
 
 interface ChatThread {
   id: string;
@@ -18,6 +18,7 @@ interface ChatThread {
   lastMessage: string;
   timestamp: Date;
   unread: boolean;
+  parentUserId?: string;
   messages: { sender: "me" | "them"; text: string; time: Date }[];
 }
 
@@ -40,271 +41,216 @@ export function TeacherParentChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeThreadId, threads]);
 
-  useEffect(() => {
+  const syncAllThreads = async () => {
     const allStudents = studentsData?.pages.flatMap((p) => p.data) ?? [];
     const allClasses = classesData?.pages.flatMap((p) => p.data) ?? [];
     const allParents = parentsData?.pages.flatMap((p) => p.data) ?? [];
     const allTeachers = teachersData?.pages.flatMap((p) => p.data) ?? [];
 
-    const myProfile = allTeachers.find(t => t.user_id === user?.id);
+    const myProfile = allTeachers.find(t => t.user_id === user?.id || t.id === user?.id);
     const myClasses = allClasses.filter(c => c.teacher_id === user?.id || c.teacher_id === myProfile?.id);
     const myClassIds = myClasses.map(c => c.id);
     const myStudents = allStudents.filter(s => myClassIds.includes(s.class_id));
-    const myStudentIds = myStudents.map(s => s.id);
 
-    const savedThreads = localStorage.getItem(`teacher-messages-${user?.id}`);
-    let existingThreads: Record<string, ChatThread> = {};
-    if (savedThreads) {
+    // Fetch unified messages from backend API + shared store
+    const allDirectMessages = await messageService.getMessages();
+
+    // Migrate any legacy messages if present
+    const legacySaved = localStorage.getItem(`teacher-messages-${user?.id}`);
+    if (legacySaved) {
       try {
-        const parsed = JSON.parse(savedThreads);
+        const parsed = JSON.parse(legacySaved);
         parsed.forEach((t: any) => {
-          existingThreads[t.id] = {
-            ...t,
-            timestamp: new Date(t.timestamp),
-            messages: t.messages.map((m: any) => ({ ...m, time: new Date(m.time) }))
-          };
+          if (Array.isArray(t.messages)) {
+            t.messages.forEach((m: any) => {
+              messageService.sendMessage({
+                sender_id: user?.id || "teacher",
+                sender_name: [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Teacher",
+                recipient_id: t.parentUserId || t.id,
+                recipient_name: t.name,
+                student_name: t.studentName,
+                text: m.text,
+              }).catch(() => {});
+            });
+          }
         });
+        localStorage.removeItem(`teacher-messages-${user?.id}`);
       } catch (e) {}
     }
 
-    const generatedThreads: ChatThread[] = [];
+    const candidateParents: { parentUserId: string; name: string; studentName: string }[] = [];
 
-    const parentMessagesMap = new Map();
-    if (typeof window !== "undefined") {
-       for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key?.startsWith('parent-messages-')) {
-             try {
-                const pParsed = JSON.parse(localStorage.getItem(key) || "[]");
-                pParsed.forEach((t: any) => {
-                   if (t.id.includes(`teacher_${user?.id}`)) {
-                      const parentUserId = key.replace('parent-messages-', '');
-                      parentMessagesMap.set(parentUserId, t);
-                   }
-                });
-             } catch(e) {}
-          }
-       }
-    }
-
-    // 1. Add parents of students in teacher's assigned classes
+    // 1. Assigned class parents
     myStudents.forEach(student => {
-      const parentProfile = allParents.find(p => p.student_id === student.id || p.student_id === student.user_id);
-      
-      if (parentProfile) {
-        const threadId = `parent_${parentProfile.id || parentProfile.user_id}_child_${student.id}`;
-        let threadToPush: ChatThread;
-        
-        if (existingThreads[threadId]) {
-          threadToPush = existingThreads[threadId];
-          threadToPush.name = [parentProfile.first_name, parentProfile.last_name].filter(Boolean).join(" ") || "Parent";
-          threadToPush.studentName = [student.first_name, student.last_name].filter(Boolean).join(" ");
-        } else {
-          threadToPush = {
-              id: threadId,
-              name: [parentProfile.first_name, parentProfile.last_name].filter(Boolean).join(" ") || "Parent",
-              studentName: [student.first_name, student.last_name].filter(Boolean).join(" "),
-              role: "Parent",
-              lastMessage: "No messages yet.",
-              timestamp: new Date(),
-              unread: false,
-              messages: []
-          };
-        }
-
-        generatedThreads.push(threadToPush);
+      const p = allParents.find(parent => parent.student_id === student.id || parent.student_id === student.user_id);
+      if (p) {
+        candidateParents.push({
+          parentUserId: p.user_id || p.id,
+          name: [p.first_name, p.last_name].filter(Boolean).join(" ") || "Parent",
+          studentName: [student.first_name, student.last_name].filter(Boolean).join(" ") || "Student",
+        });
       }
     });
 
-    // 2. Add ALL school parents so teacher can always communicate with any parent in the school
-    allParents.forEach(parentProfile => {
-      const student = allStudents.find(s => s.id === parentProfile.student_id || s.user_id === parentProfile.student_id);
-      const parentName = [parentProfile.first_name, parentProfile.last_name].filter(Boolean).join(" ") || "Parent";
-      const studentName = student ? [student.first_name, student.last_name].filter(Boolean).join(" ") : "Student";
-      const threadId = `parent_${parentProfile.id || parentProfile.user_id}_child_${student?.id || 'general'}`;
+    // 2. All school parents
+    allParents.forEach(p => {
+      const student = allStudents.find(s => s.id === p.student_id || s.user_id === p.student_id);
+      candidateParents.push({
+        parentUserId: p.user_id || p.id,
+        name: [p.first_name, p.last_name].filter(Boolean).join(" ") || "Parent",
+        studentName: student ? [student.first_name, student.last_name].filter(Boolean).join(" ") : "Student",
+      });
+    });
 
-      if (!generatedThreads.find(g => g.id === threadId)) {
-        if (existingThreads[threadId]) {
-          const t = existingThreads[threadId];
-          t.name = parentName;
-          t.studentName = studentName;
-          generatedThreads.push(t);
-        } else {
-          generatedThreads.push({
-            id: threadId,
-            name: parentName,
-            studentName: studentName,
-            role: "Parent",
-            lastMessage: "No messages yet.",
-            timestamp: new Date(),
-            unread: false,
-            messages: []
+    // 3. Parents from incoming messages
+    allDirectMessages.forEach(m => {
+      const otherId = m.sender_id === user?.id ? m.recipient_id : m.sender_id;
+      const otherName = m.sender_id === user?.id ? m.recipient_name : m.sender_name;
+      if (otherId && otherId !== user?.id) {
+        candidateParents.push({
+          parentUserId: otherId,
+          name: otherName || "Parent",
+          studentName: m.student_name || "Student",
+        });
+      }
+    });
+
+    // 4. Default mock parent fallback if list is empty
+    if (candidateParents.length === 0) {
+      candidateParents.push({
+        parentUserId: "parent@learnbeyond.edu",
+        name: "Martha Appleseed (Parent)",
+        studentName: "Johnny Appleseed",
+      });
+    }
+
+    // Deduplicate candidate parents
+    const uniqueMap = new Map<string, { parentUserId: string; name: string; studentName: string }>();
+    candidateParents.forEach(cp => {
+      const key = `${cp.name.trim().toLowerCase()}_${cp.studentName.trim().toLowerCase()}`;
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, cp);
+      }
+    });
+
+    // Build chat threads with actual synced messages
+    const builtThreads: ChatThread[] = [];
+    uniqueMap.forEach(({ parentUserId, name, studentName }) => {
+      const threadMessages: { sender: "me" | "them"; text: string; time: Date }[] = [];
+
+      allDirectMessages.forEach(m => {
+        const isFromMeToParent = m.sender_id === user?.id && (m.recipient_id === parentUserId || m.recipient_name?.toLowerCase() === name.toLowerCase());
+        const isFromParentToMe = (m.sender_id === parentUserId || m.sender_name?.toLowerCase() === name.toLowerCase()) && (m.recipient_id === user?.id || !m.recipient_id);
+        const isMatchingStudent = m.student_name && studentName && m.student_name.toLowerCase() === studentName.toLowerCase();
+
+        if (isFromMeToParent || isFromParentToMe || isMatchingStudent) {
+          const isSenderMe = m.sender_id === user?.id;
+          threadMessages.push({
+            sender: isSenderMe ? "me" : "them",
+            text: m.text,
+            time: new Date(m.created_at),
           });
         }
-      }
-    });
-
-    // 3. Also include ANY threads that parents have initiated, even if DB relations are missing
-    parentMessagesMap.forEach((parentThread, parentUserId) => {
-      const parentProfile = allParents.find(p => p.user_id === parentUserId || p.id === parentUserId);
-      const studentMatch = parentThread.id.match(/child_([a-zA-Z0-9-]+)/);
-      const childId = studentMatch ? studentMatch[1] : null;
-      const student = allStudents.find(s => s.id === childId || s.user_id === childId);
-      
-      const threadId = `parent_${parentProfile?.id || parentUserId}_child_${childId || 'general'}`;
-      
-      let threadToPush = generatedThreads.find(t => t.id === threadId);
-      if (!threadToPush) {
-        if (existingThreads[threadId]) {
-          threadToPush = existingThreads[threadId];
-        } else {
-          threadToPush = {
-            id: threadId,
-            name: parentProfile ? [parentProfile.first_name, parentProfile.last_name].filter(Boolean).join(" ") : parentThread.name || "Parent",
-            studentName: student ? [student.first_name, student.last_name].filter(Boolean).join(" ") : parentThread.studentName || "Student",
-            role: "Parent",
-            lastMessage: "No messages yet.",
-            timestamp: new Date(),
-            unread: false,
-            messages: []
-          };
-        }
-        generatedThreads.push(threadToPush);
-      }
-    });
-
-    // Sync messages for all generated threads
-    generatedThreads.forEach(threadToPush => {
-      // We need to find the corresponding parent thread
-      const match = threadToPush.id.match(/parent_([a-zA-Z0-9-]+)_child_([a-zA-Z0-9-]+)/);
-      const parentId = match ? match[1] : null;
-      
-      let threadFromParent: any = null;
-      parentMessagesMap.forEach((pt, pUid) => {
-         if (pUid === parentId) {
-             threadFromParent = pt;
-         }
       });
 
-      if (threadFromParent) {
-         const newMessages = [...threadToPush.messages];
-         threadFromParent.messages.forEach((m: any) => {
-            const exists = newMessages.find(nm => new Date(nm.time).getTime() === new Date(m.time).getTime() && nm.text === m.text);
-            if (!exists && m.sender === "me") {
-               newMessages.push({
-                  sender: "them",
-                  text: m.text,
-                  time: new Date(m.time)
-               });
-            }
-         });
-         newMessages.sort((a, b) => a.time.getTime() - b.time.getTime());
-         if (newMessages.length > 0) {
-            const lastMsg = newMessages[newMessages.length - 1];
-            threadToPush.messages = newMessages;
-            threadToPush.lastMessage = lastMsg.text;
-            threadToPush.timestamp = lastMsg.time;
-         }
-      }
+      threadMessages.sort((a, b) => a.time.getTime() - b.time.getTime());
+
+      const lastMsg = threadMessages.length > 0 ? threadMessages[threadMessages.length - 1].text : "No messages yet.";
+      const lastTime = threadMessages.length > 0 ? threadMessages[threadMessages.length - 1].time : new Date();
+
+      builtThreads.push({
+        id: `thread_parent_${parentUserId}`,
+        name,
+        studentName,
+        role: "Parent",
+        lastMessage: lastMsg,
+        timestamp: lastTime,
+        unread: false,
+        parentUserId,
+        messages: threadMessages,
+      });
     });
 
-    // SAFETY NET: Ensure any existing threads from localStorage are preserved
-    Object.values(existingThreads).forEach(t => {
-       if (!generatedThreads.find(g => g.id === t.id)) {
-           // We need to merge parent messages into this existing thread too, if any
-           const match = t.id.match(/parent_([a-zA-Z0-9-]+)_child_([a-zA-Z0-9-]+)/);
-           const parentId = match ? match[1] : null;
-           let threadFromParent: any = null;
-           parentMessagesMap.forEach((pt, pUid) => {
-              const pProf = allParents.find(p => p.user_id === pUid);
-              if (pProf?.id === parentId || pUid === parentId) {
-                  threadFromParent = pt;
-              }
-           });
-           
-           if (threadFromParent) {
-              const newMessages = [...t.messages];
-              threadFromParent.messages.forEach((m: any) => {
-                 const exists = newMessages.find(nm => new Date(nm.time).getTime() === new Date(m.time).getTime() && nm.text === m.text);
-                 if (!exists && m.sender === "me") {
-                    newMessages.push({
-                       sender: "them",
-                       text: m.text,
-                       time: new Date(m.time)
-                    });
-                 }
-              });
-              newMessages.sort((a, b) => a.time.getTime() - b.time.getTime());
-              if (newMessages.length > 0) {
-                 const lastMsg = newMessages[newMessages.length - 1];
-                 t.messages = newMessages;
-                 t.lastMessage = lastMsg.text;
-                 t.timestamp = lastMsg.time;
-              }
-           }
-           generatedThreads.push(t);
-       }
-    });
+    builtThreads.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-    const uniqueThreadsMap = new Map<string, ChatThread>();
-    generatedThreads.forEach(t => {
-       const key = `${t.name}_${t.studentName}`;
-       const existing = uniqueThreadsMap.get(key);
-       if (!existing || t.messages.length > existing.messages.length) {
-           uniqueThreadsMap.set(key, t);
-       }
-    });
-    const finalThreads = Array.from(uniqueThreadsMap.values());
-
-    if (finalThreads.length > 0) {
-      setThreads(finalThreads.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()));
-      if (!activeThreadId) setActiveThreadId(finalThreads[0].id);
-    } else {
-      setThreads([]);
-      setActiveThreadId("");
+    setThreads(builtThreads);
+    if (!activeThreadId && builtThreads.length > 0) {
+      setActiveThreadId(builtThreads[0].id);
     }
+  };
+
+  useEffect(() => {
+    syncAllThreads();
+
+    const handleSyncEvent = () => {
+      syncAllThreads();
+    };
+
+    window.addEventListener("storage", handleSyncEvent);
+    window.addEventListener("learnbeyond_chat_sync", handleSyncEvent);
+    window.addEventListener("newMessageNotification", handleSyncEvent);
+
+    // 3-second live sync polling interval for real-time across cloud & multiple devices
+    const interval = setInterval(syncAllThreads, 3000);
+
+    return () => {
+      window.removeEventListener("storage", handleSyncEvent);
+      window.removeEventListener("learnbeyond_chat_sync", handleSyncEvent);
+      window.removeEventListener("newMessageNotification", handleSyncEvent);
+      clearInterval(interval);
+    };
   }, [studentsData, classesData, parentsData, teachersData, user]);
 
-  const activeThread = threads.find((t) => t.id === activeThreadId);
+  const activeThread = threads.find((t) => t.id === activeThreadId) || threads[0];
 
   const filteredThreads = threads.filter((t) => {
     const s = search.toLowerCase();
     return t.name.toLowerCase().includes(s) || (t.studentName && t.studentName.toLowerCase().includes(s));
   });
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputText.trim() || !activeThread) return;
+    const textToSend = inputText.trim();
+    setInputText("");
+    setSuggestedReply(null);
+
     const newMessage = {
       sender: "me" as const,
-      text: inputText,
+      text: textToSend,
       time: new Date(),
     };
 
-    setThreads((prev) => {
-      const newThreads = prev.map((t) =>
+    // Instant optimistic update
+    setThreads((prev) =>
+      prev.map((t) =>
         t.id === activeThread.id
           ? {
               ...t,
-              lastMessage: inputText,
+              lastMessage: textToSend,
               timestamp: new Date(),
               messages: [...t.messages, newMessage],
             }
           : t
-      );
-      localStorage.setItem(`teacher-messages-${user?.id}`, JSON.stringify(newThreads));
-      return newThreads;
+      )
+    );
+
+    // Send through persistent messageService (updates DB on Render + broadcasts)
+    await messageService.sendMessage({
+      sender_id: user?.id || "teacher_user",
+      sender_name: [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Jane Smith (Teacher)",
+      recipient_id: activeThread.parentUserId || activeThread.id,
+      recipient_name: activeThread.name,
+      student_name: activeThread.studentName,
+      text: textToSend,
+      channel: "teacher_parent",
     });
 
-    window.dispatchEvent(new CustomEvent('newMessageNotification', {
-      detail: { title: "New Message", message: `Message sent successfully.`, type: 'message' }
-    }));
-
-    setInputText("");
-    setSuggestedReply(null);
+    // Re-sync immediately
+    syncAllThreads();
   };
 
   const generateAISuggestedReply = () => {
-    setSuggestedReply(`Thank you for reaching out regarding ${activeThread?.studentName?.split(" ")[0]}. We are seeing great progress in class!`);
+    setSuggestedReply(`Thank you for reaching out regarding ${activeThread?.studentName?.split(" ")[0] || "your child"}. We are seeing great progress in class!`);
   };
 
   return (
