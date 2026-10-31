@@ -6,3 +6,5 @@ uploads/
 frontend/.next/
 frontend/node_modules/
 *.log
+logs/
+backend/logs/

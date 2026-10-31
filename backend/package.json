@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "db:setup": "node src/config/setupDatabase.js",
     "lint": "eslint ."
   },
   "dependencies": {

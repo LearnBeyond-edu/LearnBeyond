@@ -132,10 +132,19 @@ export default function CreateLessonPage() {
           }
         }
         
+        // Consolidate rich curriculum models for Tactile Sandbox and Kinesthetic AR
+        const { buildLessonCurriculum } = await import("@/lib/lessonCurriculumEngine");
+        const curriculum = buildLessonCurriculum({ title: parsed.title || topic, content: parsed.content || aiResponse });
+        
+        const consolidatedTactileData = {
+          title: `${parsed.title || topic} Multi-Sensory Lab`,
+          tactile_sandbox: parsed.tactile_data?.tactile_sandbox || curriculum.tactile,
+          kinesthetic: parsed.tactile_data?.kinesthetic || curriculum.kinesthetic,
+          layers: parsed.tactile_data?.layers || []
+        };
+        
         let finalContent = parsed.content || aiResponse;
-        if (parsed.tactile_data) {
-           finalContent += `\n\n<!-- TACTILE_DATA: ${JSON.stringify(parsed.tactile_data)} -->`;
-        }
+        finalContent += `\n\n<!-- TACTILE_DATA: ${JSON.stringify(consolidatedTactileData)} -->`;
         
         form.setValue("title", parsed.title || `Exploring ${topic}`);
         form.setValue("description", parsed.description || `An introductory lesson about ${topic}.`);
@@ -177,9 +186,18 @@ export default function CreateLessonPage() {
         }
       } catch (parseError) {
         // Fallback if AI formatting fails completely
+        const { buildLessonCurriculum } = await import("@/lib/lessonCurriculumEngine");
+        const curriculum = buildLessonCurriculum({ title: `Exploring ${topic}`, content: aiResponse });
+        const consolidatedTactileData = {
+          title: `Exploring ${topic} Multi-Sensory Lab`,
+          tactile_sandbox: curriculum.tactile,
+          kinesthetic: curriculum.kinesthetic
+        };
+        const fallbackContent = `${aiResponse}\n\n<!-- TACTILE_DATA: ${JSON.stringify(consolidatedTactileData)} -->`;
+
         form.setValue("title", `Exploring ${topic}`);
         form.setValue("description", `An introductory lesson about ${topic} tailored for middle-school comprehension.`);
-        form.setValue("content", aiResponse);
+        form.setValue("content", fallbackContent);
 
         // Attach topic-specific reference videos even in fallback mode
         try {

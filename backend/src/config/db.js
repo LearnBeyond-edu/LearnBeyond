@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const logger = require('../utils/logger');
+const { setup } = require('./setupDatabase');
 
 // Database configuration based on environment variables
 const pool = process.env.DATABASE_URL
@@ -33,10 +34,23 @@ const connectWithRetry = async (retries = 5, delay = 5000) => {
       const res = await client.query('SELECT NOW()');
       logger.info(`PostgreSQL Connected: ${res.rows[0].now}`);
       try {
-        await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS app_state JSONB DEFAULT '{}'::jsonb;`);
-        logger.info('Ensured app_state column exists in users table.');
+        const check = await client.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'users'
+          );
+        `);
+        const tablesExist = check.rows[0]?.exists;
+        if (!tablesExist) {
+          logger.info('Fresh Neon database detected. Auto-initializing schema & seed data...');
+          await setup(client);
+        } else {
+          await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS app_state JSONB DEFAULT '{}'::jsonb;`);
+          logger.info('Ensured app_state column exists in users table.');
+        }
       } catch (colErr) {
-        logger.error(`Error adding app_state column: ${colErr.message}`);
+        logger.error(`Database setup/migration check note: ${colErr.message}`);
       }
       client.release();
       return;

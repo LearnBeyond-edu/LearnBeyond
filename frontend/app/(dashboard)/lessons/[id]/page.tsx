@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+import { buildLessonCurriculum } from "@/lib/lessonCurriculumEngine";
 
 // ==========================================
 // TACTILE TOUCH & FEEL PHYSICS SANDBOX (FLAWLESS & RESPONSIVE)
@@ -51,11 +52,15 @@ function TactilePhysicsSandbox({
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [activeTouchHint, setActiveTouchHint] = useState<string>("Touch, squeeze & drag bodies into the glowing sockets!");
 
-  // Internal physical nodes state
+  // Internal physical nodes state with complete educational metadata
   const nodesRef = useRef<Array<{
     id: string;
     name: string;
     role: string;
+    symbol?: string;
+    desc?: string;
+    howItWorks?: string;
+    fact?: string;
     icon: string;
     color: string;
     colorHex: string;
@@ -119,12 +124,14 @@ function TactilePhysicsSandbox({
   const getColorHex = (c: string) => {
     switch (c) {
       case 'amber': return '#f59e0b';
+      case 'orange': return '#f97316';
       case 'blue': return '#3b82f6';
       case 'teal': return '#14b8a6';
       case 'red': return '#ef4444';
       case 'purple': return '#a855f7';
       case 'emerald': return '#10b981';
       case 'indigo': return '#6366f1';
+      case 'slate': return '#94a3b8';
       default: return '#06b6d4';
     }
   };
@@ -169,6 +176,7 @@ function TactilePhysicsSandbox({
     // If nodes already exist, update targets and docks smoothly without resetting drag
     if (nodesRef.current.length === config.steps.length) {
       nodesRef.current.forEach((node, idx) => {
+        const step = config.steps[idx];
         const dockX = (width / 4) * (idx + 1);
         const dockY = height - 52;
         const target = targets[idx] || { x: centerX, y: centerY };
@@ -176,6 +184,16 @@ function TactilePhysicsSandbox({
         node.targetY = target.y;
         node.dockX = dockX;
         node.dockY = dockY;
+        if (step) {
+          node.name = step.name;
+          node.role = step.role;
+          node.symbol = step.symbol || (idx === 0 ? "Q₁" : idx === 1 ? "W" : "Q₂");
+          node.desc = step.desc;
+          node.howItWorks = step.howItWorks;
+          node.fact = step.fact;
+          node.color = step.color;
+          node.colorHex = getColorHex(step.color);
+        }
         if (node.isPlaced && !node.isDragging) {
           node.x = target.x;
           node.y = target.y;
@@ -193,6 +211,10 @@ function TactilePhysicsSandbox({
           id: step.id,
           name: step.name,
           role: step.role,
+          symbol: step.symbol || (idx === 0 ? "Q₁" : idx === 1 ? "W" : "Q₂"),
+          desc: step.desc,
+          howItWorks: step.howItWorks,
+          fact: step.fact,
           icon: step.icon,
           color: step.color,
           colorHex: getColorHex(step.color),
@@ -200,7 +222,7 @@ function TactilePhysicsSandbox({
           y: isPlaced ? target.y : dockY,
           vx: 0,
           vy: 0,
-          radius: idx === 0 ? 30 : idx === 1 ? 25 : 22,
+          radius: idx === 0 ? 30 : idx === 1 ? 26 : 24,
           targetX: target.x,
           targetY: target.y,
           dockX,
@@ -260,7 +282,7 @@ function TactilePhysicsSandbox({
     if (containerRef.current) observer.observe(containerRef.current);
 
     return () => observer.disconnect();
-  }, [config.conceptType]);
+  }, [config.conceptType, config.title, config.steps]);
 
   // Sync external tactileItems
   useEffect(() => {
@@ -454,24 +476,101 @@ function TactilePhysicsSandbox({
           ctx.setLineDash([]);
         } else if (nodes.length >= 3) {
           // Wire between fixed target sockets
-          ctx.strokeStyle = allActive ? 'rgba(34, 197, 94, 0.75)' : 'rgba(148, 163, 184, 0.3)';
-          ctx.lineWidth = allActive ? 4 : 2.5;
+          const wire1Active = !!tactileItems[nodes[0].id] && !!tactileItems[nodes[1].id];
+          const wire2Active = !!tactileItems[nodes[1].id] && !!tactileItems[nodes[2].id];
+
+          // Segment 1: Node 0 -> Node 1
+          ctx.save();
+          ctx.strokeStyle = wire1Active ? 'rgba(52, 211, 153, 0.9)' : 'rgba(148, 163, 184, 0.3)';
+          ctx.lineWidth = wire1Active ? 4 : 2;
           ctx.beginPath();
           ctx.moveTo(nodes[0].targetX, nodes[0].targetY);
           ctx.lineTo(nodes[1].targetX, nodes[1].targetY);
-          ctx.lineTo(nodes[2].targetX, nodes[2].targetY);
           ctx.stroke();
 
-          if (allActive) {
-            const sparkOffset = (Date.now() * 0.12) % 100;
+          // Segment 2: Node 1 -> Node 2
+          ctx.strokeStyle = wire2Active ? 'rgba(52, 211, 153, 0.9)' : 'rgba(148, 163, 184, 0.3)';
+          ctx.lineWidth = wire2Active ? 4 : 2;
+          ctx.beginPath();
+          ctx.moveTo(nodes[1].targetX, nodes[1].targetY);
+          ctx.lineTo(nodes[2].targetX, nodes[2].targetY);
+          ctx.stroke();
+          ctx.restore();
+
+          // Animated energy pulse and educational labels
+          const now = Date.now();
+          if (wire1Active) {
+            const t1 = (now * 0.0015) % 1;
+            const px1 = nodes[0].targetX + (nodes[1].targetX - nodes[0].targetX) * t1;
+            const py1 = nodes[0].targetY + (nodes[1].targetY - nodes[0].targetY) * t1;
+            ctx.save();
             ctx.fillStyle = '#fef08a';
             ctx.shadowColor = '#fef08a';
             ctx.shadowBlur = 12;
             ctx.beginPath();
-            const sparkX = nodes[0].targetX + (nodes[2].targetX - nodes[0].targetX) * (sparkOffset / 100);
-            ctx.arc(sparkX, nodes[0].targetY, 5, 0, Math.PI * 2);
+            ctx.arc(px1, py1, 5, 0, Math.PI * 2);
             ctx.fill();
-            ctx.shadowBlur = 0;
+            ctx.restore();
+
+            if (config.flow1to2) {
+              const midX1 = (nodes[0].targetX + nodes[1].targetX) / 2;
+              const midY1 = (nodes[0].targetY + nodes[1].targetY) / 2 - 32;
+              ctx.save();
+              ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+              ctx.strokeStyle = 'rgba(52, 211, 153, 0.6)';
+              ctx.lineWidth = 1;
+              const text1 = config.flow1to2;
+              ctx.font = 'bold 10px system-ui, sans-serif';
+              const textW1 = ctx.measureText(text1).width;
+              const boxW1 = textW1 + 16;
+              const boxH1 = 20;
+              ctx.beginPath();
+              ctx.roundRect(midX1 - boxW1 / 2, midY1 - boxH1 / 2, boxW1, boxH1, 6);
+              ctx.fill();
+              ctx.stroke();
+              ctx.fillStyle = '#6ee7b7';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(text1, midX1, midY1);
+              ctx.restore();
+            }
+          }
+
+          if (wire2Active) {
+            const t2 = (now * 0.0015 + 0.5) % 1;
+            const px2 = nodes[1].targetX + (nodes[2].targetX - nodes[1].targetX) * t2;
+            const py2 = nodes[1].targetY + (nodes[2].targetY - nodes[1].targetY) * t2;
+            ctx.save();
+            ctx.fillStyle = '#38bdf8';
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = 12;
+            ctx.beginPath();
+            ctx.arc(px2, py2, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            if (config.flow2to3) {
+              const midX2 = (nodes[1].targetX + nodes[2].targetX) / 2;
+              const midY2 = (nodes[1].targetY + nodes[2].targetY) / 2 + 32;
+              ctx.save();
+              ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+              ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+              ctx.lineWidth = 1;
+              const text2 = config.flow2to3;
+              ctx.font = 'bold 10px system-ui, sans-serif';
+              const textW2 = ctx.measureText(text2).width;
+              const boxW2 = textW2 + 16;
+              const boxH2 = 20;
+              ctx.beginPath();
+              ctx.roundRect(midX2 - boxW2 / 2, midY2 - boxH2 / 2, boxW2, boxH2, 6);
+              ctx.fill();
+              ctx.stroke();
+              ctx.fillStyle = '#7dd3fc';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(text2, midX2, midY2);
+              ctx.restore();
+            }
           }
         }
 
@@ -492,11 +591,14 @@ function TactilePhysicsSandbox({
           ctx.setLineDash([]);
 
           if (!isOccupied) {
-            ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
             ctx.font = 'bold 9px monospace';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(`SOCKET ${idx + 1}`, tx, ty);
+            ctx.fillText(`SOCKET ${idx + 1}`, tx, ty - 6);
+            ctx.font = 'bold 8px system-ui, sans-serif';
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
+            ctx.fillText(node.name.slice(0, 14), tx, ty + 7);
           }
           ctx.restore();
         });
@@ -559,7 +661,7 @@ function TactilePhysicsSandbox({
           ctx.translate(node.x, node.y);
 
           ctx.shadowColor = node.colorHex;
-          ctx.shadowBlur = isPlaced || node.isDragging ? 24 : 10;
+          ctx.shadowBlur = isPlaced || node.isDragging ? 26 : 10;
 
           const grad = ctx.createRadialGradient(-rad * 0.3, -rad * 0.3, 2, 0, 0, rad);
           grad.addColorStop(0, '#ffffff');
@@ -577,14 +679,91 @@ function TactilePhysicsSandbox({
           ctx.ellipse(-rad * 0.35, -rad * 0.35, Math.max(0.1, rad * 0.3), Math.max(0.1, rad * 0.18), -Math.PI / 4, 0, Math.PI * 2);
           ctx.fill();
 
-          // Node Label
+          // Symbol inside node sphere
           ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 11px system-ui, sans-serif';
+          ctx.font = `bold ${rad > 26 ? 12 : 10}px system-ui, sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText(node.name.split(' ')[0], 0, rad + 14);
+          ctx.shadowColor = '#000000';
+          ctx.shadowBlur = 4;
+          const ballSymbol = node.symbol || `S${node.name.charAt(0)}`;
+          ctx.fillText(ballSymbol, 0, 0);
+          ctx.shadowBlur = 0;
+
+          // Concept Name & Role floating pill badge below ball
+          const labelY = rad + 14;
+          const nameText = node.name;
+          const roleText = node.role || "";
+          ctx.font = 'bold 11px system-ui, sans-serif';
+          const nameW = ctx.measureText(nameText).width;
+          ctx.font = 'normal 9px system-ui, sans-serif';
+          const roleW = ctx.measureText(roleText).width;
+          const maxTextW = Math.max(nameW, roleW);
+          const badgeW = maxTextW + 16;
+          const badgeH = roleText ? 30 : 18;
+
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+          ctx.strokeStyle = isPlaced ? node.colorHex : 'rgba(148, 163, 184, 0.35)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.roundRect(-badgeW / 2, labelY - 4, badgeW, badgeH, 6);
+          ctx.fill();
+          ctx.stroke();
+
+          // Title
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 11px system-ui, sans-serif';
+          ctx.fillText(nameText, 0, labelY + (roleText ? 5 : 5));
+
+          // Role
+          if (roleText) {
+            ctx.fillStyle = node.colorHex;
+            ctx.font = 'bold 9px system-ui, sans-serif';
+            ctx.fillText(roleText, 0, labelY + 18);
+          }
+
           ctx.restore();
         });
+
+        // 5. TOP FLOATING EDUCATIONAL PRINCIPLE BANNER
+        ctx.save();
+        const activeNodeCount = nodes.filter(n => !!tactileItems[n.id]).length;
+        let bannerText = "";
+        let bannerColor = "#94a3b8";
+
+        if (activeNodeCount === 0) {
+          bannerText = `Touch & drag concept balls into sockets to learn how ${config.title} works!`;
+          bannerColor = "#cbd5e1";
+        } else if (activeNodeCount === 1) {
+          const first = nodes.find(n => !!tactileItems[n.id]);
+          bannerText = `Step 1 Active: ${first?.name || 'Node'} anchored. Anchor the next concept ball!`;
+          bannerColor = "#38bdf8";
+        } else if (activeNodeCount === 2) {
+          bannerText = `⚡ Coupling Active: ${config.flow1to2 || 'Concepts transferring energy!'} Anchor the 3rd ball!`;
+          bannerColor = "#f59e0b";
+        } else {
+          bannerText = `🌟 System In Equilibrium: ${config.systemPrinciple || config.successTitle}`;
+          bannerColor = "#34d399";
+        }
+
+        ctx.font = 'bold 11px system-ui, sans-serif';
+        const bannerW = Math.min(width - 24, ctx.measureText(bannerText).width + 24);
+        const bannerX = width / 2;
+        const bannerY = 22;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+        ctx.strokeStyle = bannerColor;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.roundRect(bannerX - bannerW / 2, bannerY - 12, bannerW, 24, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = bannerColor;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(bannerText, bannerX, bannerY);
+        ctx.restore();
 
         // 5. ALL ACTIVE RESONANCE OVERLAY ON CANVAS
         if (allActive) {
@@ -685,7 +864,7 @@ function TactilePhysicsSandbox({
       const node = nodes[pickedIndex];
       node.isDragging = true;
       triggerHapticAudio(340, 0.12, 'sine');
-      setActiveTouchHint(`Dragging ${node.name} • Release into the glowing socket.`);
+      setActiveTouchHint(`Dragging ${node.name} • ${node.howItWorks || node.desc || node.role}`);
     } else {
       // Check if user clicked directly on any target socket to toggle it
       for (let i = 0; i < nodes.length; i++) {
@@ -797,8 +976,8 @@ function TactilePhysicsSandbox({
         });
 
         setTactileItems(prev => ({ ...prev, [node.id]: true }));
-        toast.success(`Snapped ${node.name} into place!`);
-        setActiveTouchHint(`✅ ${node.name} is securely anchored. Drag the next item!`);
+        toast.success(`Anchored ${node.name}!`);
+        setActiveTouchHint(`✅ ${node.name} anchored: ${node.howItWorks || node.desc || node.role}`);
       } else {
         // If it was released far away from socket, unplace it
         node.isPlaced = false;
@@ -992,11 +1171,13 @@ function TactilePhysicsSandbox({
                     {step.icon === 'Battery' && <Battery className="h-5 w-5" />}
                     {step.icon === 'Lightbulb' && <Lightbulb className="h-5 w-5" />}
                     {step.icon === 'Layers' && <Layers className="h-5 w-5" />}
+                    {step.icon === 'Flame' && <Flame className="h-5 w-5" />}
+                    {step.icon === 'Droplets' && <Droplets className="h-5 w-5" />}
                     {step.icon === 'Sparkles' && <Sparkles className="h-5 w-5" />}
                   </div>
                   <div>
                     <span className="text-[10px] font-mono text-slate-400 font-bold uppercase block">
-                      STEP {step.stepNumber}
+                      STEP {step.stepNumber} • {step.role}
                     </span>
                     <h4 className={`text-sm font-bold font-heading ${isActive ? 'text-teal-300' : 'text-white'}`}>
                       {step.name}
@@ -1012,6 +1193,16 @@ function TactilePhysicsSandbox({
               <p className="text-xs text-slate-300 leading-relaxed">
                 {step.desc}
               </p>
+
+              {/* How it works in the system */}
+              <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/80 text-[11px] space-y-1">
+                <span className="text-[10px] font-mono font-bold text-teal-400 uppercase tracking-wider block">
+                  ⚙️ HOW THIS WORKS IN SYSTEM:
+                </span>
+                <p className="text-slate-300 leading-relaxed font-sans">
+                  {step.howItWorks || step.desc}
+                </p>
+              </div>
 
               <div className="pt-2 border-t border-slate-800/80">
                 <span className="text-[11px] text-teal-400/90 font-sans block">
@@ -1032,18 +1223,25 @@ function TactilePhysicsSandbox({
 
       {/* COMPLETION MASTERY BANNER */}
       {isAllActive && (
-        <div className="p-5 rounded-2xl bg-gradient-to-r from-teal-950 via-emerald-950 to-slate-950 border-2 border-teal-400 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in zoom-in duration-300">
+        <div className="p-6 rounded-2xl bg-gradient-to-r from-teal-950 via-emerald-950 to-slate-950 border-2 border-teal-400 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in zoom-in duration-300">
           <div className="flex items-center gap-4 text-center sm:text-left">
-            <div className="p-3 bg-teal-500/20 rounded-2xl text-teal-400">
+            <div className="p-3 bg-teal-500/20 rounded-2xl text-teal-400 shrink-0">
               <Award className="h-8 w-8" />
             </div>
-            <div>
+            <div className="space-y-1">
               <h4 className="text-base font-bold text-white font-heading">
                 {config.successTitle}
               </h4>
-              <p className="text-xs text-teal-300/90 mt-0.5">
+              <p className="text-xs text-teal-300/90 leading-relaxed">
                 {config.successSummary}
               </p>
+              {config.systemPrinciple && (
+                <div className="pt-1">
+                  <span className="text-[11px] font-mono text-emerald-300 bg-emerald-950/60 px-2.5 py-1 rounded-md border border-emerald-500/30 inline-block">
+                    🔬 {config.systemPrinciple}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1136,190 +1334,9 @@ export default function LessonViewerPage() {
     } catch (e) {}
   };
 
-  // Easy Hands-on Lab Configuration
+  // Dynamic Hands-on Lab Configuration derived from Universal Curriculum Engine
   const getTactileLabConfig = (lessonData: any) => {
-    const title = lessonData?.title || "";
-    const content = lessonData?.content || "";
-    const t = title.toLowerCase();
-
-    if (t.includes("solar") || t.includes("planet") || t.includes("space") || t.includes("star") || t.includes("earth") || t.includes("orbit")) {
-      return {
-        conceptType: "space",
-        title: "Hands-On Solar System Lab",
-        subtitle: "Touch and activate each celestial body to build a working planetary orbit!",
-        badge: "Astronomy & Gravity",
-        accentColor: "amber",
-        steps: [
-          {
-            id: "item1",
-            stepNumber: 1,
-            name: "Ignite the Sun",
-            role: "Center Star & Gravity Well",
-            desc: "The massive gravitational anchor holding planets in stable orbit.",
-            icon: "Sun",
-            color: "amber",
-            fact: "The Sun contains 99.8% of all mass in our solar system!"
-          },
-          {
-            id: "item2",
-            stepNumber: 2,
-            name: "Launch Planet Earth",
-            role: "Habitable Goldilocks Zone",
-            desc: "The middle orbit where liquid water and atmosphere can thrive.",
-            icon: "Globe",
-            color: "blue",
-            fact: "Earth is situated at the perfect distance for life to flourish."
-          },
-          {
-            id: "item3",
-            stepNumber: 3,
-            name: "Tether the Moon",
-            role: "Natural Satellite & Tides",
-            desc: "The outer orbital partner that stabilizes Earth's axial tilt and tides.",
-            icon: "Moon",
-            color: "teal",
-            fact: "The Moon's gravitational pull controls our ocean tides every day."
-          }
-        ],
-        pulseLabel: "Simulate Solar Gravitational Flare",
-        successTitle: "Solar System Active & In Perfect Orbit!",
-        successSummary: "All gravitational forces are balanced. The planets and moon are orbiting smoothly!"
-      };
-    }
-
-    if (t.includes("cell") || t.includes("biol") || t.includes("plant") || t.includes("animal") || t.includes("gene") || t.includes("dna") || t.includes("body")) {
-      return {
-        conceptType: "biology",
-        title: "Hands-On Living Cell Builder",
-        subtitle: "Touch and place each vital organelle to bring the microscopic cell to life!",
-        badge: "Cellular Biology",
-        accentColor: "emerald",
-        steps: [
-          {
-            id: "item1",
-            stepNumber: 1,
-            name: "Build Cell Membrane",
-            role: "Protective Outer Barrier",
-            desc: "A selective shield that protects the cell and controls what enters.",
-            icon: "Shield",
-            color: "teal",
-            fact: "The membrane is like a security guard deciding who gets in and out."
-          },
-          {
-            id: "item2",
-            stepNumber: 2,
-            name: "Place Mitochondria",
-            role: "Cellular Powerhouse",
-            desc: "Generates ATP chemical energy to fuel all cell activities.",
-            icon: "Zap",
-            color: "amber",
-            fact: "Mitochondria convert the food we eat into usable cellular energy!"
-          },
-          {
-            id: "item3",
-            stepNumber: 3,
-            name: "Insert DNA Nucleus",
-            role: "Master Control Center",
-            desc: "Contains all the genetic blueprints and instructions for life.",
-            icon: "Atom",
-            color: "purple",
-            fact: "The nucleus holds all the DNA code that makes living organisms unique."
-          }
-        ],
-        pulseLabel: "Simulate ATP Cellular Energy Surge",
-        successTitle: "Cell Alive & Fully Synthesized!",
-        successSummary: "The protective membrane, energy generators, and DNA control center are working together!"
-      };
-    }
-
-    if (t.includes("physic") || t.includes("force") || t.includes("motion") || t.includes("energy") || t.includes("mechanic") || t.includes("newton") || t.includes("electric")) {
-      return {
-        conceptType: "physics",
-        title: "Hands-On Energy & Circuit Lab",
-        subtitle: "Connect the power source, conductor, and motor to complete the kinetic circuit!",
-        badge: "Physics & Energy",
-        accentColor: "indigo",
-        steps: [
-          {
-            id: "item1",
-            stepNumber: 1,
-            name: "Connect 12V Battery",
-            role: "Electrical Potential Source",
-            desc: "Provides voltage pressure to push electrons through the wire.",
-            icon: "Battery",
-            color: "red",
-            fact: "Voltage is the electrical pressure that drives current forward."
-          },
-          {
-            id: "item2",
-            stepNumber: 2,
-            name: "Close Circuit Switch",
-            role: "Current Flow Conductor",
-            desc: "Completes the closed loop so energy can travel without interruption.",
-            icon: "Zap",
-            color: "amber",
-            fact: "Electricity can only flow when there is a continuous, unbroken path."
-          },
-          {
-            id: "item3",
-            stepNumber: 3,
-            name: "Power the Kinetic Motor",
-            role: "Energy Transformer",
-            desc: "Converts electrical current into mechanical rotation and light.",
-            icon: "Lightbulb",
-            color: "emerald",
-            fact: "Energy cannot be destroyed—it only changes from electrical to kinetic form!"
-          }
-        ],
-        pulseLabel: "Send High-Voltage Power Surge",
-        successTitle: "Circuit Complete & Motor Spinning!",
-        successSummary: "Current is flowing continuously and the motor is generating kinetic energy!"
-      };
-    }
-
-    // General Science / CS / Chemistry Lab
-    return {
-      conceptType: "general",
-      title: "Hands-On Concept Discovery Lab",
-      subtitle: "Touch and activate the 3 core foundations to complete your interactive experiment!",
-      badge: "Hands-On Learning",
-      accentColor: "teal",
-      steps: [
-        {
-          id: "item1",
-          stepNumber: 1,
-          name: "1. Core Foundation",
-          role: "Initial Input & Source",
-          desc: "Sets the baseline input parameters for the interactive system.",
-          icon: "Layers",
-          color: "blue",
-          fact: "Every successful system starts with a strong, well-defined foundation."
-        },
-        {
-          id: "item2",
-          stepNumber: 2,
-          name: "2. Active Engine",
-          role: "Process & Transformation",
-          desc: "Transforms inputs through logical rules, reactions, or mechanics.",
-          icon: "Zap",
-          color: "amber",
-          fact: "The core engine processes inputs and drives the main reaction."
-        },
-        {
-          id: "item3",
-          stepNumber: 3,
-          name: "3. Result Output",
-          role: "Stable Completed State",
-          desc: "Achieves full operational harmony and demonstrates the final concept.",
-          icon: "Sparkles",
-          color: "emerald",
-          fact: "When all components link together, the system functions seamlessly!"
-        }
-      ],
-      pulseLabel: "Test Interactive Reaction Pulse",
-      successTitle: "Experiment Complete & Synchronized!",
-      successSummary: "All 3 components are active and balanced in complete harmony!"
-    };
+    return buildLessonCurriculum(lessonData).tactile;
   };
 
   // Removed Particle Engine Loop
@@ -1548,121 +1565,9 @@ export default function LessonViewerPage() {
   const [circuit, setCircuit] = useState({ item0: false, item1: false, item2: false });
   const isCircuitComplete = circuit.item0 && circuit.item1 && circuit.item2;
 
-  // Dynamic Tactile Theme based on Lesson
-  const getTactileTheme = (lesson: any) => {
-    const title = lesson?.title || "";
-    const t = title.toLowerCase();
-    
-    // Check if AI generated dynamic kinesthetic metadata
-    const content = lesson?.content || "";
-    if (content) {
-      const match = content.match(/<!--\s*TACTILE_DATA:\s*([\s\S]*?)\s*-->/);
-      if (match && match[1]) {
-        try {
-          const parsed = JSON.parse(match[1].trim());
-          if (parsed.kinesthetic) {
-            return {
-              title: parsed.kinesthetic.title || "Simulate Process",
-              items: parsed.kinesthetic.items || [
-                { id: "item0", label: "INPUT", color: "blue" },
-                { id: "item1", label: "PROCESS", color: "amber" },
-                { id: "item2", label: "OUTPUT", color: "emerald" }
-              ],
-              success: parsed.kinesthetic.success || "PROCESS COMPLETE!",
-              layout: 'linear',
-              bgClass: "bg-slate-950 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:24px_24px]",
-              instructions: parsed.kinesthetic.instructions || [
-                "1. Place the first component.",
-                "2. Place the second component.",
-                "3. Place the final component."
-              ]
-            };
-          }
-        } catch(e) {}
-      }
-    }
-    if (t.includes("solar") || t.includes("planet") || t.includes("space")) {
-      return {
-        title: "Assemble the Solar System",
-        items: [{ id: "sun", label: "SUN", color: "amber" }, { id: "earth", label: "EARTH", color: "blue" }, { id: "moon", label: "MOON", color: "slate" }],
-        success: "Orbit Established!",
-        layout: 'orbit',
-        bgClass: "bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-purple-900 to-black",
-        instructions: [
-          "1. Ignite the core: Pick up the Sun and place it in the center.",
-          "2. Set the habitable zone: Move the Earth to the middle orbit.",
-          "3. Create tidal forces: Place the Moon on the outer orbit."
-        ]
-      };
-    }
-    if (t.includes("cell") || t.includes("biol") || t.includes("plant") || t.includes("animal")) {
-      return {
-        title: "Build the Cell",
-        items: [{ id: "nucleus", label: "NUCLEUS", color: "purple" }, { id: "mito", label: "MITOCHONDRIA", color: "red" }, { id: "membrane", label: "MEMBRANE", color: "emerald" }],
-        success: "Cell Synthesized!",
-        layout: 'cell',
-        bgClass: "bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-950 via-teal-950 to-black",
-        instructions: [
-          "1. Establish control: Place the Nucleus in the center.",
-          "2. Generate power: Move the Mitochondria inside the cell.",
-          "3. Protect the cell: Wrap the Membrane around the outside."
-        ]
-      };
-    }
-    if (t.includes("math") || t.includes("algebra") || t.includes("fraction")) {
-      return {
-        title: "Solve the Equation",
-        items: [{ id: "var", label: "VARIABLE X", color: "blue" }, { id: "op", label: "OPERATOR", color: "amber" }, { id: "sol", label: "SOLUTION", color: "emerald" }],
-        success: "Equation Balanced!",
-        layout: 'linear',
-        bgClass: "bg-slate-950 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:24px_24px]",
-        instructions: [
-          "1. Define the unknown: Place Variable X on the left.",
-          "2. Apply logic: Place the Operator in the middle.",
-          "3. Find the answer: Place the Solution on the right."
-        ]
-      };
-    }
-    if (t.includes("chem") || t.includes("water") || t.includes("atom")) {
-      return {
-        title: "Form the Molecule",
-        items: [{ id: "h1", label: "HYDROGEN", color: "blue" }, { id: "h2", label: "HYDROGEN", color: "blue" }, { id: "o1", label: "OXYGEN", color: "red" }],
-        success: "Molecule Stable!",
-        layout: 'linear',
-        bgClass: "bg-slate-950 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:24px_24px]",
-        instructions: [
-          "1. Place the first Hydrogen atom.",
-          "2. Place the second Hydrogen atom.",
-          "3. Bond them with the central Oxygen atom."
-        ]
-      };
-    }
-    if (t.includes("code") || t.includes("program") || t.includes("computer")) {
-      return {
-        title: "Compile the Program",
-        items: [{ id: "input", label: "INPUT DATA", color: "slate" }, { id: "logic", label: "LOGIC GATE", color: "purple" }, { id: "output", label: "OUTPUT", color: "emerald" }],
-        success: "Program Executed!",
-        layout: 'linear',
-        bgClass: "bg-slate-950 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:24px_24px]",
-        instructions: [
-          "1. Feed the system: Place the Input Data.",
-          "2. Process it: Place the Logic Gate in the center.",
-          "3. Yield results: Place the Output at the end."
-        ]
-      };
-    }
-    return {
-      title: "Assemble the Circuit",
-      items: [{ id: "battery", label: "9V BATTERY", color: "red" }, { id: "resistor", label: "RESISTOR", color: "amber" }, { id: "led", label: "LED DIODE", color: "blue" }],
-      success: "Circuit Operational!",
-      layout: 'linear',
-      bgClass: "bg-slate-950 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:24px_24px]",
-      instructions: [
-        "1. Power source: Place the 9V Battery to start the flow.",
-        "2. Control current: Place the Resistor in the middle.",
-        "3. See the result: Place the LED to complete the circuit."
-      ]
-    };
+  // Dynamic Universal Kinesthetic Theme based on Lesson
+  const getTactileTheme = (lessonData: any) => {
+    return buildLessonCurriculum(lessonData).kinesthetic;
   };
 
   const getColorClasses = (color: string) => {
@@ -1671,6 +1576,9 @@ export default function LessonViewerPage() {
     if (color === 'amber') return 'bg-amber-950/80 border-amber-500/50 text-amber-100 shadow-amber-500/10';
     if (color === 'emerald') return 'bg-emerald-950/80 border-emerald-500/50 text-emerald-100 shadow-emerald-500/10';
     if (color === 'purple') return 'bg-purple-950/80 border-purple-500/50 text-purple-100 shadow-purple-500/10';
+    if (color === 'teal') return 'bg-teal-950/80 border-teal-500/50 text-teal-100 shadow-teal-500/10';
+    if (color === 'cyan') return 'bg-cyan-950/80 border-cyan-500/50 text-cyan-100 shadow-cyan-500/10';
+    if (color === 'orange') return 'bg-orange-950/80 border-orange-500/50 text-orange-100 shadow-orange-500/10';
     return 'bg-slate-900/80 border-slate-500/50 text-slate-100 shadow-slate-500/10';
   };
 
@@ -2069,17 +1977,29 @@ export default function LessonViewerPage() {
 
                         {/* Success Explosion */}
                         {arExplosion && (
-                          <div className="absolute inset-0 flex flex-col items-center justify-center z-50 bg-black/40 backdrop-blur-sm animate-in fade-in duration-500 pointer-events-auto">
-                            <h2 className="text-5xl md:text-7xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200 animate-[pulse_1s_infinite] drop-shadow-[0_0_20px_rgba(52,211,153,0.8)] font-heading uppercase tracking-widest scale-150">
-                              EXCELLENCE!
+                          <div className="absolute inset-0 flex flex-col items-center justify-center z-50 bg-black/75 backdrop-blur-md animate-in fade-in duration-500 pointer-events-auto p-6 text-center">
+                            <div className="w-20 h-20 bg-emerald-500/20 border-2 border-emerald-400 rounded-3xl flex items-center justify-center mb-4 shadow-[0_0_50px_rgba(16,185,129,0.5)]">
+                              <Sparkles className="w-10 h-10 text-emerald-400 animate-spin" />
+                            </div>
+                            <h2 className="text-4xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-200 to-cyan-400 drop-shadow-[0_0_20px_rgba(52,211,153,0.8)] font-heading uppercase tracking-wider">
+                              {theme.title} Complete!
                             </h2>
-                            <p className="mt-8 text-xl font-bold text-white tracking-widest uppercase bg-teal-900/50 px-6 py-2 rounded-full border border-teal-500 mb-12">{theme.success}</p>
+                            <p className="mt-4 text-base md:text-lg font-bold text-emerald-200 tracking-wide uppercase bg-emerald-950/80 px-6 py-2 rounded-full border border-emerald-500/40">
+                              {theme.success}
+                            </p>
+                            
+                            {theme.educationalTakeaway && (
+                              <div className="mt-5 max-w-xl p-4 rounded-2xl bg-black/60 border border-teal-500/30 text-teal-100 text-sm leading-relaxed backdrop-blur-md text-left">
+                                <span className="text-xs uppercase font-mono tracking-widest text-teal-400 block mb-1 font-bold">💡 Core Scientific Principle Mastered</span>
+                                {theme.educationalTakeaway}
+                              </div>
+                            )}
                             
                             <Button 
                               onClick={() => startSimulation(false)} 
-                              className="relative z-50 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg px-12 py-6 rounded-full shadow-[0_0_30px_rgba(16,185,129,0.5)] border border-emerald-300 pointer-events-auto"
+                              className="mt-6 relative z-50 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold text-base px-10 py-5 rounded-2xl shadow-[0_0_30px_rgba(16,185,129,0.5)] border border-emerald-300 pointer-events-auto"
                             >
-                              COMPLETE & EXIT ARENA
+                              Complete & Exit Arena
                             </Button>
                             
                             <div className="absolute w-full h-full pointer-events-none bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-teal-400/30 via-transparent to-transparent opacity-50 animate-[ping_2s_infinite] -z-10"></div>
@@ -2089,19 +2009,31 @@ export default function LessonViewerPage() {
                         {/* Target Zones */}
                         {!arExplosion && targets.map(target => {
                           const isPlaced = arPlacedItems[target.id as keyof typeof arPlacedItems];
+                          const item = theme.items[target.id];
                           return (
                             <div 
                               key={`target-${target.id}`}
-                              className={`absolute w-32 h-32 rounded-3xl border-4 border-dashed flex flex-col items-center justify-center transition-all duration-300 ${isPlaced ? 'border-emerald-500 bg-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.4)] scale-110' : 'border-white/40 bg-black/20'}`}
+                              className={`absolute w-36 h-36 rounded-3xl border-4 border-dashed flex flex-col items-center justify-center transition-all duration-300 p-2 text-center ${isPlaced ? 'border-emerald-500 bg-emerald-500/20 shadow-[0_0_30px_rgba(16,185,129,0.4)] scale-105' : 'border-teal-500/40 bg-black/40 backdrop-blur-sm'}`}
                               style={{ left: `${target.x}%`, top: `${target.y}%`, transform: 'translate(-50%, -50%)' }}
                             >
                               {isPlaced ? (
                                 <>
-                                  <Sparkles className="w-8 h-8 text-emerald-400 mb-2 animate-pulse" />
-                                  <span className="text-[12px] font-bold text-emerald-100">{theme.items[target.id].label}</span>
+                                  <Sparkles className="w-6 h-6 text-emerald-400 mb-1 animate-pulse" />
+                                  <span className="text-xl mb-0.5">{item?.symbol || '✨'}</span>
+                                  <span className="text-[12px] font-bold text-emerald-100 leading-tight">{item?.label || `TARGET ${target.id + 1}`}</span>
+                                  {item?.role && (
+                                    <span className="text-[9px] uppercase font-mono tracking-wider text-emerald-300 mt-0.5">{item.role}</span>
+                                  )}
                                 </>
                               ) : (
-                                <span className="text-[12px] font-bold text-white/50 text-center leading-tight">TARGET<br/>{theme.items[target.id].label}</span>
+                                <>
+                                  <span className="text-xl opacity-60 mb-0.5">{item?.symbol || '🎯'}</span>
+                                  <span className="text-[9px] font-mono tracking-widest text-teal-400 font-semibold uppercase">SOCKET {target.id + 1}</span>
+                                  <span className="text-[11px] font-bold text-white/80 leading-tight mt-0.5">{item?.label || `TARGET ${target.id + 1}`}</span>
+                                  {item?.role && (
+                                    <span className="text-[8px] font-mono text-white/50 tracking-wider uppercase mt-0.5">{item.role}</span>
+                                  )}
+                                </>
                               )}
                             </div>
                           );
@@ -2112,15 +2044,20 @@ export default function LessonViewerPage() {
                           const isPlaced = arPlacedItems[spawn.id as keyof typeof arPlacedItems];
                           const isPicked = arPickedItem === spawn.id;
                           if (isPlaced || isPicked) return null;
+                          const item = theme.items[spawn.id];
                           return (
                             <div 
                               key={`spawn-${spawn.id}`}
-                              className={`absolute w-28 h-28 rounded-2xl flex flex-col items-center justify-center shadow-2xl bg-black/80 border border-white/20`}
+                              className={`absolute w-32 h-36 rounded-2xl flex flex-col items-center justify-center shadow-2xl bg-black/85 border border-white/20 backdrop-blur-md transition-transform hover:scale-105 p-2`}
                               style={{ left: `${spawn.x}%`, top: `${spawn.y}%`, transform: 'translate(-50%, -50%)' }}
                             >
-                              <div className={`w-16 h-16 rounded-full mb-2 flex items-center justify-center shadow-lg ${getColorClasses(theme.items[spawn.id].color)}`}>
-                                <span className="text-[10px] font-bold text-center px-1 leading-none">{theme.items[spawn.id].label}</span>
+                              <div className={`w-14 h-14 rounded-2xl mb-1.5 flex flex-col items-center justify-center shadow-lg border ${getColorClasses(item?.color || 'teal')}`}>
+                                <span className="text-2xl leading-none">{item?.symbol || '📦'}</span>
                               </div>
+                              <span className="text-[11px] font-bold text-center px-1 text-white leading-tight">{item?.label || `COMPONENT ${spawn.id + 1}`}</span>
+                              {item?.role && (
+                                <span className="text-[8px] uppercase font-mono text-white/60 tracking-wider mt-0.5 text-center">{item.role}</span>
+                              )}
                             </div>
                           );
                         })}
@@ -2128,11 +2065,12 @@ export default function LessonViewerPage() {
                         {/* Picked Item Attached to Cursor */}
                         {!arExplosion && arPickedItem !== null && (
                           <div 
-                            className="absolute w-28 h-28 rounded-2xl flex flex-col items-center justify-center pointer-events-none will-change-transform"
+                            className="absolute w-32 h-32 rounded-2xl flex flex-col items-center justify-center pointer-events-none will-change-transform z-30"
                             style={{ left: `${arCursor.x}%`, top: `${arCursor.y}%`, transform: 'translate(-50%, -50%)' }}
                           >
-                            <div className={`w-20 h-20 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(255,255,255,0.4)] border-4 border-white animate-[pulse_1s_infinite] ${getColorClasses(theme.items[arPickedItem].color)}`}>
-                              <span className="text-[12px] font-bold text-center px-1 leading-none">{theme.items[arPickedItem].label}</span>
+                            <div className={`w-20 h-20 rounded-2xl flex flex-col items-center justify-center shadow-[0_0_40px_rgba(255,255,255,0.4)] border-2 border-white animate-[pulse_1s_infinite] ${getColorClasses(theme.items[arPickedItem]?.color || 'teal')}`}>
+                              <span className="text-2xl leading-none mb-1">{theme.items[arPickedItem]?.symbol || '📦'}</span>
+                              <span className="text-[10px] font-bold text-center px-1 leading-none">{theme.items[arPickedItem]?.label}</span>
                             </div>
                           </div>
                         )}
@@ -2159,27 +2097,34 @@ export default function LessonViewerPage() {
                     </div>
 
                     {/* AI Mission Instructions Panel */}
-                    <div className="absolute right-4 top-20 w-72 bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col gap-4">
-                      <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-                        <Sparkles className="w-5 h-5 text-teal-400" />
-                        <h4 className="text-white font-bold font-heading">AI Mission Briefing</h4>
-                      </div>
-                      <div className="space-y-4">
-                        {(() => {
-                           const theme = getTactileTheme(lesson);
-                           return (theme.instructions || []).map((step: string, idx: number) => {
-                             const isCompleted = arPlacedItems[idx as keyof typeof arPlacedItems];
-                             return (
-                                <div key={idx} className={`flex gap-3 text-sm transition-opacity duration-300 ${isCompleted ? 'opacity-40 line-through text-teal-200' : 'text-slate-200'}`}>
-                                  <div className={`mt-0.5 w-4 h-4 rounded-full flex-shrink-0 border flex items-center justify-center ${isCompleted ? 'bg-teal-500 border-teal-500' : 'border-slate-500'}`}>
-                                    {isCompleted && <CheckCircle className="w-3 h-3 text-white" />}
+                    <div className="absolute right-4 top-20 w-80 bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl flex flex-col gap-3 z-30">
+                      {(() => {
+                        const theme = getTactileTheme(lesson);
+                        return (
+                          <>
+                            <div className="flex items-center gap-2.5 border-b border-white/10 pb-3">
+                              <Sparkles className="w-5 h-5 text-teal-400 shrink-0" />
+                              <div className="overflow-hidden">
+                                <h4 className="text-white font-bold text-xs uppercase tracking-wider font-heading truncate">{theme.title}</h4>
+                                <p className="text-[10px] text-teal-300/80 font-mono">Kinesthetic Spatial Task</p>
+                              </div>
+                            </div>
+                            <div className="space-y-3">
+                              {(theme.instructions || []).map((step: string, idx: number) => {
+                                const isCompleted = arPlacedItems[idx as keyof typeof arPlacedItems];
+                                return (
+                                  <div key={idx} className={`flex gap-2.5 text-xs transition-all duration-300 ${isCompleted ? 'opacity-40 line-through text-teal-200' : 'text-slate-200'}`}>
+                                    <div className={`mt-0.5 w-4 h-4 rounded-full flex-shrink-0 border flex items-center justify-center ${isCompleted ? 'bg-teal-500 border-teal-500 text-white' : 'border-slate-500 text-slate-400'}`}>
+                                      {isCompleted ? <CheckCircle className="w-3 h-3" /> : <span className="text-[9px] font-bold">{idx + 1}</span>}
+                                    </div>
+                                    <p className="leading-snug">{step}</p>
                                   </div>
-                                  <p className="leading-snug">{step}</p>
-                                </div>
-                             );
-                           });
-                        })()}
-                      </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                 </div>
 

@@ -207,15 +207,15 @@ export async function generateAIResponse(prompt: string, preferGroq: boolean = f
         ? `https://www.youtube.com/embed/${vidId2}`
         : `https://www.youtube.com/embed?listType=search&list=${encodeURIComponent(extractedTopic + " crash course complete tutorial")}`;
 
-      let calibrationText = "";
-      const t = extractedTopic.toLowerCase();
-      if (t.includes("solar") || t.includes("planet") || t.includes("space") || t.includes("astronomy")) {
-        calibrationText = "Simulation Calibration Target:\nTo successfully complete your physical Tactile Sandbox simulation for this lesson, you must calibrate the machinery to these exact specifications:\n- Gravity: 9.8 m/s²\n- Velocity: 75 km/s\n- Thruster: ON";
-      } else if (t.includes("cell") || t.includes("biol") || t.includes("plant") || t.includes("animal")) {
-        calibrationText = "Simulation Calibration Target:\nTo successfully complete your physical Tactile Sandbox simulation for this lesson, you must calibrate the machinery to these exact specifications:\n- Fine Focus: 400\n- Pan X: 50\n- Pan Y: 50";
-      } else {
-        calibrationText = `Simulation Calibration Target:\nTo successfully complete your physical Tactile Sandbox simulation for this lesson, you must successfully unscrew the outer chassis and physically peel back the internal layers to reveal the core concept.\n\n<!-- TACTILE_DATA: {"title": "Interactive Teardown: ${extractedTopic}", "layers": [{"id": "l1", "name": "Outer Chassis", "prompt": "Highly detailed macro photography of the outer shell of ${extractedTopic}, studio lighting, hyperrealistic, 8k"}, {"id": "l2", "name": "Internal Mechanism", "prompt": "Highly detailed macro photography of the internal mechanisms and structures of ${extractedTopic}, complex, hyperrealistic"}, {"id": "l3", "name": "Core Essence", "prompt": "Highly detailed macro photography of the absolute core concept of ${extractedTopic}, glowing slightly, hyperrealistic"}]} -->`;
-      }
+      const { buildLessonCurriculum } = await import("@/lib/lessonCurriculumEngine");
+      const curriculum = buildLessonCurriculum({ title: extractedTopic, content: `Comprehensive guide and notes on ${extractedTopic}` });
+      const tactileDataPayload = {
+        title: `${extractedTopic} Multi-Sensory Lab`,
+        tactile_sandbox: curriculum.tactile,
+        kinesthetic: curriculum.kinesthetic
+      };
+
+      const calibrationText = `Simulation Calibration Target:\nTo complete your physical Tactile Sandbox and Kinesthetic AR simulations for this lesson, interact with the 3 foundational concept nodes and align the components in the AR arena.\n\n<!-- TACTILE_DATA: ${JSON.stringify(tactileDataPayload)} -->`;
 
       return JSON.stringify({
         title: `Comprehensive Guide to ${extractedTopic}`,
