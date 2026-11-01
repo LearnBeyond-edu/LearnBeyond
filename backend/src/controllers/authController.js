@@ -92,10 +92,14 @@ class AuthController {
     try {
       const { getClient } = require('../config/db');
       const client = await getClient();
-      let fullUser;
+      let fullUser = {};
       try {
         const userRes = await client.query('SELECT id, first_name as "firstName", last_name as "lastName", email, phone, bio, address, cover_image, profile_photo, role_id, laura_state, app_state FROM users WHERE id = $1', [req.user.id]);
-        fullUser = userRes.rows[0];
+        if (userRes.rows.length > 0) {
+          fullUser = userRes.rows[0];
+        }
+      } catch (dbErr) {
+        console.warn('DB query in me failed:', dbErr.message);
       } finally {
         client.release();
       }

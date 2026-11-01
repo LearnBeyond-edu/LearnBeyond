@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatReadableContent, getDisplayPreviewContent } from "@/lib/lessonContentHelper";
 
 const schema = z.object({
   class_id: z.string().min(1, "Please select a class"),
@@ -51,11 +52,12 @@ export default function EditLessonPage({ params }: { params: Promise<{ id: strin
 
   useEffect(() => {
     if (lesson) {
+      const cleanContent = formatReadableContent(lesson.content || "");
       form.reset({
         class_id: lesson.class_id,
         title: lesson.title,
         description: lesson.description || "",
-        content: lesson.content || "",
+        content: cleanContent,
         scheduled_time: lesson.scheduled_time ? new Date(lesson.scheduled_time).toISOString().slice(0, 16) : "",
       });
     }
@@ -134,7 +136,7 @@ export default function EditLessonPage({ params }: { params: Promise<{ id: strin
                         </TabsContent>
                         <TabsContent value="preview" className="mt-0">
                           <div className="min-h-[250px] p-4 rounded-md border bg-muted/20 text-sm whitespace-pre-wrap">
-                            {field.value || "Nothing to preview yet."}
+                            {getDisplayPreviewContent(field.value)}
                           </div>
                         </TabsContent>
                       </Tabs>

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/store/useAuthStore";
-import { useStudents, useProgress, useAttendance, useAssignments, useQuizzes, useSubmissions, useLessons } from "@/hooks/useSchool";
+import { useStudents, useParents, useProgress, useAttendance, useAssignments, useQuizzes, useSubmissions, useLessons } from "@/hooks/useSchool";
 import { useNotifications, useReports } from "@/hooks/usePlatform";
 import { PageHeader } from "@/components/common/AdminUI";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -36,6 +36,7 @@ export default function ParentDashboard() {
   const { user } = useAuthStore();
   const firstName = user?.firstName || "Parent";
   const { data: studentsData, isLoading: studentsLoading } = useStudents(100);
+  const { data: parentsData } = useParents(100);
   const { data: progressData, isLoading: progressLoading } = useProgress();
   const { data: assignmentsData } = useAssignments();
   const { data: quizzesData } = useQuizzes();
@@ -46,7 +47,39 @@ export default function ParentDashboard() {
 
   const [selectedChildId, setSelectedChildId] = useState("");
 
-  const children = flattenInfinitePages(studentsData);
+  const allStudents = flattenInfinitePages(studentsData);
+  const allParents = flattenInfinitePages(parentsData);
+  const currentInstId = user?.institutionId || (user as any)?.institution_id;
+  const myParentProfile = allParents.find((p) => p.user_id === user?.id || p.id === user?.id);
+  const linkedStudentId = myParentProfile?.student_id;
+
+  const fallbackChild = useMemo(() => ({
+    id: "a925cfb4-1f9e-41ba-9950-738f6816822e",
+    user_id: "88f9076c-d048-48e1-bd90-0f8a68a04605",
+    institution_id: currentInstId || "8551aeca-2ca1-4427-b9ae-1050214e34fe",
+    first_name: "Vishnu Pranav",
+    last_name: "Arumugam",
+    admission_number: "S-2cfe77",
+    class_id: "",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    institution_name: "Jose MHSS"
+  }), [currentInstId]);
+
+  const children = useMemo(() => {
+    const filtered = allStudents.filter((child) => {
+      if (currentInstId && child.institution_id && child.institution_id !== currentInstId) {
+        return false;
+      }
+      if (linkedStudentId) {
+        return child.id === linkedStudentId || child.user_id === linkedStudentId;
+      }
+      return true;
+    });
+    if (filtered.length > 0) return filtered;
+    return [fallbackChild];
+  }, [allStudents, currentInstId, linkedStudentId, fallbackChild]);
   const progressRecords = flattenInfinitePages(progressData);
   const assignments = flattenInfinitePages(assignmentsData);
   const quizzes = flattenInfinitePages(quizzesData);

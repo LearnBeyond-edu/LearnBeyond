@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState, useEffect } from "react";
 import { Sparkles, Bot, PenTool } from "lucide-react";
+import { getDisplayPreviewContent } from "@/lib/lessonContentHelper";
 
 const schema = z.object({
   class_id: z.string().min(1, "Please select a class"),
@@ -89,66 +90,26 @@ export default function CreateLessonPage() {
       const aiResponse = await generateAIResponse(prompt, true); // True defaults to Groq for speed
       
       try {
-        // Strip out any markdown code blocks if the AI still included them
-        const jsonStr = aiResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
-        
-        let parsed;
-        try {
-          parsed = JSON.parse(jsonStr);
-        } catch (e) {
-          // Fallback regex parser for invalid JSON string literal control characters (literal newlines)
-          const titleMatch = jsonStr.match(/"title"\s*:\s*"([^"]*)"/i);
-          const descMatch = jsonStr.match(/"description"\s*:\s*"([^"]*)"/i);
-          const contentMatch = jsonStr.match(/"content"\s*:\s*"([\s\S]*?)"\s*(?:,|})/i);
-          
-          if (!titleMatch && !contentMatch) throw e;
-          
-          parsed = {
-            title: titleMatch ? titleMatch[1] : "",
-            description: descMatch ? descMatch[1] : "",
-            content: contentMatch ? contentMatch[1] : "",
-            youtube_videos: [],
-            tactile_data: null
-          };
-        }
-
-        // Robust fallback extraction for tactile_data if missing
-        if (!parsed.tactile_data) {
-          const startIndex = jsonStr.indexOf('"tactile_data"');
-          if (startIndex !== -1) {
-            const bracketIndex = jsonStr.indexOf('{', startIndex);
-            if (bracketIndex !== -1) {
-              let braceCount = 0;
-              let endIndex = -1;
-              for (let i = bracketIndex; i < jsonStr.length; i++) {
-                if (jsonStr[i] === '{') braceCount++;
-                if (jsonStr[i] === '}') braceCount--;
-                if (braceCount === 0) { endIndex = i; break; }
-              }
-              if (endIndex !== -1) {
-                try { parsed.tactile_data = JSON.parse(jsonStr.substring(bracketIndex, endIndex + 1)); } catch(err) {}
-              }
-            }
-          }
-        }
-        
-        // Consolidate rich curriculum models for Tactile Sandbox and Kinesthetic AR
+        const { parseAILessonResponse } = await import("@/lib/lessonContentHelper");
         const { buildLessonCurriculum } = await import("@/lib/lessonCurriculumEngine");
-        const curriculum = buildLessonCurriculum({ title: parsed.title || topic, content: parsed.content || aiResponse });
-        
+
+        const parsed = parseAILessonResponse(aiResponse, topic);
+        const curriculum = buildLessonCurriculum({ title: parsed.title, content: parsed.content });
+
         const consolidatedTactileData = {
-          title: `${parsed.title || topic} Multi-Sensory Lab`,
+          title: `${parsed.title} Multi-Sensory Lab`,
           tactile_sandbox: parsed.tactile_data?.tactile_sandbox || curriculum.tactile,
           kinesthetic: parsed.tactile_data?.kinesthetic || curriculum.kinesthetic,
           layers: parsed.tactile_data?.layers || []
         };
-        
-        let finalContent = parsed.content || aiResponse;
+
+        // Format clean, human-readable content with tactile metadata appended at the very bottom
+        let finalContent = parsed.content.replace(/<!--\s*TACTILE_DATA:[\s\S]*?-->/g, '').trim();
         finalContent += `\n\n<!-- TACTILE_DATA: ${JSON.stringify(consolidatedTactileData)} -->`;
-        
-        form.setValue("title", parsed.title || `Exploring ${topic}`);
-        form.setValue("description", parsed.description || `An introductory lesson about ${topic}.`);
-        form.setValue("content", finalContent);
+
+        form.setValue("title", parsed.title);
+        form.setValue("description", parsed.description);
+        form.setValue("content", parsed.content);
 
         // Automatically fetch and attach genuine YouTube reference videos specifically for this topic
         const videoSources = (parsed.youtube_videos && Array.isArray(parsed.youtube_videos) && parsed.youtube_videos.length > 0)
@@ -186,18 +147,21 @@ export default function CreateLessonPage() {
         }
       } catch (parseError) {
         // Fallback if AI formatting fails completely
+        const { parseAILessonResponse } = await import("@/lib/lessonContentHelper");
         const { buildLessonCurriculum } = await import("@/lib/lessonCurriculumEngine");
-        const curriculum = buildLessonCurriculum({ title: `Exploring ${topic}`, content: aiResponse });
+
+        const parsed = parseAILessonResponse("", topic);
+        const curriculum = buildLessonCurriculum({ title: parsed.title, content: parsed.content });
         const consolidatedTactileData = {
-          title: `Exploring ${topic} Multi-Sensory Lab`,
+          title: `${parsed.title} Multi-Sensory Lab`,
           tactile_sandbox: curriculum.tactile,
           kinesthetic: curriculum.kinesthetic
         };
-        const fallbackContent = `${aiResponse}\n\n<!-- TACTILE_DATA: ${JSON.stringify(consolidatedTactileData)} -->`;
+        const fallbackContent = `${parsed.content}\n\n<!-- TACTILE_DATA: ${JSON.stringify(consolidatedTactileData)} -->`;
 
-        form.setValue("title", `Exploring ${topic}`);
-        form.setValue("description", `An introductory lesson about ${topic} tailored for middle-school comprehension.`);
-        form.setValue("content", fallbackContent);
+        form.setValue("title", parsed.title);
+        form.setValue("description", parsed.description);
+        form.setValue("content", parsed.content);
 
         // Attach topic-specific reference videos even in fallback mode
         try {
@@ -338,7 +302,7 @@ export default function CreateLessonPage() {
                          </TabsContent>
                          <TabsContent value="preview" className="mt-0">
                            <div className="min-h-[250px] p-4 rounded-md border bg-muted/20 text-sm whitespace-pre-wrap prose prose-sm max-w-none dark:prose-invert">
-                             {field.value || "Nothing to preview yet."}
+                             {getDisplayPreviewContent(field.value)}
                            </div>
                          </TabsContent>
                        </Tabs>

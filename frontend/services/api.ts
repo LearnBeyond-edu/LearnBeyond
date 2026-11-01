@@ -13,12 +13,23 @@ const api = axios.create({
   },
 });
 
-// Request interceptor to attach access token
+// Request interceptor to attach access token and user context
 api.interceptors.request.use(
   (config) => {
-    const token = useAuthStore.getState().accessToken;
+    const authState = useAuthStore.getState();
+    const token = authState.accessToken;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    if (authState.user?.role) {
+      config.headers['X-User-Role'] = authState.user.role;
+    }
+    if (authState.user?.id) {
+      config.headers['X-User-Id'] = authState.user.id;
+    }
+    const instId = authState.user?.institutionId || (authState.user as any)?.institution_id;
+    if (instId) {
+      config.headers['X-Institution-Id'] = instId;
     }
     return config;
   },

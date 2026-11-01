@@ -7,14 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { useAuthStore } from "@/store/useAuthStore";
-import { useStudents, useTeachers, useClasses, useParents } from "@/hooks/useSchool";
+import { useStudents, useTeachers, useClasses, useParents, useTherapists } from "@/hooks/useSchool";
 import { messageService, DirectMessage } from "@/services/messageService";
 
 interface ChatThread {
   id: string;
   name: string;
   studentName?: string;
-  role: "Teacher";
+  role: "Teacher" | "Therapist";
   lastMessage: string;
   timestamp: Date;
   unread: boolean;
@@ -28,12 +28,15 @@ export default function ParentMessagesPage() {
   const { data: classesData } = useClasses(100);
   const { data: teachersData } = useTeachers(100);
   const { data: parentsData } = useParents(100);
+  const { data: therapistsData } = useTherapists(100);
 
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string>("");
   const [search, setSearch] = useState("");
   const [inputText, setInputText] = useState("");
   const [suggestedReply, setSuggestedReply] = useState<string | null>(null);
+
+  const [isSending, setIsSending] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -46,137 +49,178 @@ export default function ParentMessagesPage() {
     const allClasses = classesData?.pages.flatMap((p) => p.data) ?? [];
     const allTeachers = teachersData?.pages.flatMap((p) => p.data) ?? [];
     const allParents = parentsData?.pages.flatMap((p) => p.data) ?? [];
+    const allTherapists = therapistsData?.pages.flatMap((p) => p.data) ?? [];
 
-    const myChildrenIds = allParents.filter(p => p.user_id === user?.id).map(p => p.student_id);
-    const myChildren = allStudents.filter(s => myChildrenIds.includes(s.id) || myChildrenIds.includes(s.user_id));
+    const myChildrenIds = allParents
+      .filter((p) => p.user_id === user?.id || p.id === user?.id)
+      .map((p) => p.student_id);
+    const myChildren = allStudents.filter(
+      (s) => myChildrenIds.includes(s.id) || myChildrenIds.includes(s.user_id)
+    );
+    const defaultStudentName = myChildren[0]
+      ? [myChildren[0].first_name, myChildren[0].last_name].filter(Boolean).join(" ")
+      : "Student";
 
     // Fetch unified messages from backend API + shared store
     const allDirectMessages = await messageService.getMessages();
 
-    // Migrate any legacy messages if present
-    const legacySaved = localStorage.getItem(`parent-messages-${user?.id}`);
-    if (legacySaved) {
-      try {
-        const parsed = JSON.parse(legacySaved);
-        parsed.forEach((t: any) => {
-          if (Array.isArray(t.messages)) {
-            t.messages.forEach((m: any) => {
-              messageService.sendMessage({
-                sender_id: user?.id || "parent",
-                sender_name: [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Parent",
-                recipient_id: t.teacherUserId || t.id,
-                recipient_name: t.name,
-                student_name: t.studentName,
-                text: m.text,
-              }).catch(() => {});
-            });
-          }
-        });
-        localStorage.removeItem(`parent-messages-${user?.id}`);
-      } catch (e) {}
+    // Clean up any old legacy key
+    if (typeof window !== "undefined" && user?.id) {
+      localStorage.removeItem(`parent-messages-${user.id}`);
     }
 
-    const candidateTeachers: { teacherUserId: string; name: string; studentName: string }[] = [];
+    const candidateContacts: {
+      contactUserId: string;
+      contactProfileId?: string;
+      name: string;
+      studentName: string;
+      role: "Teacher" | "Therapist";
+    }[] = [];
 
-    // 1. Teachers of children's classes
-    myChildren.forEach(child => {
-      const childClass = allClasses.find(c => c.id === child.class_id);
+    const currentInstId = user?.institutionId || (user as any)?.institution_id || myChildren[0]?.institution_id;
+
+    // 1. Show the assigned class teacher(s) for the parent's children
+    myChildren.forEach((child) => {
+      const childClass = allClasses.find((c) => c.id === child.class_id);
+      const studentFullName =
+        [child.first_name, child.last_name].filter(Boolean).join(" ") || defaultStudentName;
+
       if (childClass) {
-        const teacher = allTeachers.find(t => t.user_id === childClass.teacher_id || t.id === childClass.teacher_id);
-        if (teacher) {
-          candidateTeachers.push({
-            teacherUserId: teacher.user_id || teacher.id,
-            name: [teacher.first_name, teacher.last_name].filter(Boolean).join(" ") || "Jane Smith (Teacher)",
-            studentName: [child.first_name, child.last_name].filter(Boolean).join(" ") || "Johnny Appleseed",
-          });
+        const classTeacherId =
+          (childClass as any).class_teacher_id || (childClass as any).teacher_id;
+        if (classTeacherId) {
+          const teacher = allTeachers.find(
+            (t) => (t.user_id === classTeacherId || t.id === classTeacherId) &&
+                   (!currentInstId || !(t as any).institution_id || (t as any).institution_id === currentInstId)
+          );
+          if (teacher) {
+            candidateContacts.push({
+              contactUserId: teacher.user_id || teacher.id,
+              contactProfileId: teacher.id,
+              name:
+                [teacher.first_name, teacher.last_name].filter(Boolean).join(" ") ||
+                "Teacher",
+              studentName: studentFullName,
+              role: "Teacher",
+            });
+          }
         }
       }
     });
 
-    // 2. All school teachers
-    allTeachers.forEach(teacher => {
-      const child = myChildren[0];
-      candidateTeachers.push({
-        teacherUserId: teacher.user_id || teacher.id,
-        name: [teacher.first_name, teacher.last_name].filter(Boolean).join(" ") || "Jane Smith (Teacher)",
-        studentName: child ? [child.first_name, child.last_name].filter(Boolean).join(" ") : "Johnny Appleseed",
+    // 2. Also ensure respective school teachers are accessible
+    allTeachers.forEach((teacher) => {
+      if (teacher.user_id === user?.id || teacher.id === user?.id) return;
+      if (currentInstId && (teacher as any).institution_id && (teacher as any).institution_id !== currentInstId) return;
+      candidateContacts.push({
+        contactUserId: teacher.user_id || teacher.id,
+        contactProfileId: teacher.id,
+        name:
+          [teacher.first_name, teacher.last_name].filter(Boolean).join(" ") ||
+          (teacher as any).email ||
+          "Teacher",
+        studentName: defaultStudentName,
+        role: "Teacher",
       });
     });
 
-    // 3. Teachers from incoming messages
-    allDirectMessages.forEach(m => {
-      const otherId = m.sender_id === user?.id ? m.recipient_id : m.sender_id;
-      const otherName = m.sender_id === user?.id ? m.recipient_name : m.sender_name;
-      if (otherId && otherId !== user?.id) {
-        candidateTeachers.push({
-          teacherUserId: otherId,
-          name: otherName || "Teacher",
-          studentName: m.student_name || "Johnny Appleseed",
-        });
-      }
-    });
-
-    // 4. Default mock teacher fallback if list is empty
-    if (candidateTeachers.length === 0) {
-      candidateTeachers.push({
-        teacherUserId: "teacher@learnbeyond.edu",
-        name: "Jane Smith (Teacher)",
-        studentName: "Johnny Appleseed",
+    // 3. Also include respective clinical therapists so parents can consult the therapy team
+    allTherapists.forEach((therapist) => {
+      if (therapist.user_id === user?.id || therapist.id === user?.id) return;
+      if (currentInstId && (therapist as any).institution_id && (therapist as any).institution_id !== currentInstId) return;
+      candidateContacts.push({
+        contactUserId: therapist.user_id || therapist.id,
+        contactProfileId: therapist.id,
+        name:
+          [therapist.first_name, therapist.last_name].filter(Boolean).join(" ") ||
+          (therapist as any).email ||
+          "Clinical Therapist",
+        studentName: defaultStudentName,
+        role: "Therapist",
       });
-    }
+    });
 
-    // Deduplicate candidate teachers
-    const uniqueMap = new Map<string, { teacherUserId: string; name: string; studentName: string }>();
-    candidateTeachers.forEach(ct => {
-      const key = `${ct.name.trim().toLowerCase()}_${ct.studentName.trim().toLowerCase()}`;
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, ct);
+    // Deduplicate candidate contacts by contactUserId
+    const uniqueMap = new Map<
+      string,
+      { contactUserId: string; contactProfileId?: string; name: string; studentName: string; role: "Teacher" | "Therapist" }
+    >();
+    candidateContacts.forEach((ct) => {
+      if (ct.contactUserId && !uniqueMap.has(ct.contactUserId) && ct.contactUserId !== user?.id) {
+        uniqueMap.set(ct.contactUserId, ct);
       }
     });
 
-    // Build chat threads with actual synced messages
+    // Build chat threads with strictly filtered & deduplicated messages
     const builtThreads: ChatThread[] = [];
-    uniqueMap.forEach(({ teacherUserId, name, studentName }) => {
+    uniqueMap.forEach(({ contactUserId, contactProfileId, name, studentName, role }) => {
       const threadMessages: { sender: "me" | "them"; text: string; time: Date }[] = [];
 
-      allDirectMessages.forEach(m => {
-        const isFromMeToTeacher = m.sender_id === user?.id && (m.recipient_id === teacherUserId || m.recipient_name?.toLowerCase() === name.toLowerCase());
-        const isFromTeacherToMe = (m.sender_id === teacherUserId || m.sender_name?.toLowerCase() === name.toLowerCase()) && (m.recipient_id === user?.id || !m.recipient_id);
-        const isMatchingStudent = m.student_name && studentName && m.student_name.toLowerCase() === studentName.toLowerCase();
+      allDirectMessages.forEach((m) => {
+        const isFromMeToContact =
+          m.sender_id === user?.id &&
+          (m.recipient_id === contactUserId ||
+            (contactProfileId && m.recipient_id === contactProfileId));
 
-        if (isFromMeToTeacher || isFromTeacherToMe || isMatchingStudent) {
-          const isSenderMe = m.sender_id === user?.id;
+        const isFromContactToMe =
+          (m.sender_id === contactUserId ||
+            (contactProfileId && m.sender_id === contactProfileId)) &&
+          m.recipient_id === user?.id;
+
+        if (isFromMeToContact || isFromContactToMe) {
           threadMessages.push({
-            sender: isSenderMe ? "me" : "them",
+            sender: m.sender_id === user?.id ? "me" : "them",
             text: m.text,
             time: new Date(m.created_at),
           });
         }
       });
 
+      // Deduplicate identical messages sent within 3 seconds
       threadMessages.sort((a, b) => a.time.getTime() - b.time.getTime());
+      const uniqueThreadMessages: { sender: "me" | "them"; text: string; time: Date }[] = [];
+      for (const tm of threadMessages) {
+        const isDup = uniqueThreadMessages.some(
+          (u) =>
+            u.sender === tm.sender &&
+            u.text.trim().toLowerCase() === tm.text.trim().toLowerCase() &&
+            Math.abs(u.time.getTime() - tm.time.getTime()) < 3000
+        );
+        if (!isDup) {
+          uniqueThreadMessages.push(tm);
+        }
+      }
 
-      const lastMsg = threadMessages.length > 0 ? threadMessages[threadMessages.length - 1].text : "No messages yet.";
-      const lastTime = threadMessages.length > 0 ? threadMessages[threadMessages.length - 1].time : new Date();
+      const lastMsg =
+        uniqueThreadMessages.length > 0
+          ? uniqueThreadMessages[uniqueThreadMessages.length - 1].text
+          : "No messages yet.";
+      const lastTime =
+        uniqueThreadMessages.length > 0
+          ? uniqueThreadMessages[uniqueThreadMessages.length - 1].time
+          : new Date();
 
       builtThreads.push({
-        id: `thread_teacher_${teacherUserId}`,
+        id: `thread_contact_${contactUserId}`,
         name,
         studentName,
-        role: "Teacher",
+        role,
         lastMessage: lastMsg,
         timestamp: lastTime,
         unread: false,
-        teacherUserId,
-        messages: threadMessages,
+        teacherUserId: contactUserId,
+        messages: uniqueThreadMessages,
       });
     });
 
     builtThreads.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
     setThreads(builtThreads);
-    if (!activeThreadId && builtThreads.length > 0) {
-      setActiveThreadId(builtThreads[0].id);
+    if (builtThreads.length > 0) {
+      setActiveThreadId((prev) => {
+        const exists = builtThreads.some((t) => t.id === prev);
+        return exists ? prev : builtThreads[0].id;
+      });
     }
   };
 
@@ -191,7 +235,6 @@ export default function ParentMessagesPage() {
     window.addEventListener("learnbeyond_chat_sync", handleSyncEvent);
     window.addEventListener("newMessageNotification", handleSyncEvent);
 
-    // 3-second live sync polling interval for real-time across cloud & multiple devices
     const interval = setInterval(syncAllThreads, 3000);
 
     return () => {
@@ -200,7 +243,7 @@ export default function ParentMessagesPage() {
       window.removeEventListener("newMessageNotification", handleSyncEvent);
       clearInterval(interval);
     };
-  }, [studentsData, classesData, teachersData, parentsData, user]);
+  }, [studentsData, classesData, teachersData, parentsData, therapistsData, user]);
 
   const activeThread = threads.find((t) => t.id === activeThreadId) || threads[0];
 
@@ -210,44 +253,28 @@ export default function ParentMessagesPage() {
   });
 
   const handleSendMessage = async () => {
-    if (!inputText.trim() || !activeThread) return;
+    if (!inputText.trim() || !activeThread || isSending) return;
     const textToSend = inputText.trim();
     setInputText("");
     setSuggestedReply(null);
+    setIsSending(true);
 
-    const newMessage = {
-      sender: "me" as const,
-      text: textToSend,
-      time: new Date(),
-    };
+    try {
+      await messageService.sendMessage({
+        sender_id: user?.id || "parent_user",
+        sender_name: [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Parent",
+        recipient_id: activeThread.teacherUserId || activeThread.id.replace('thread_contact_', '').replace('thread_teacher_', ''),
+        recipient_name: activeThread.name,
+        student_name: activeThread.studentName,
+        text: textToSend,
+        channel: activeThread.role === "Therapist" ? "staff_therapist" : "teacher_parent",
+      });
 
-    // Instant optimistic update
-    setThreads((prev) =>
-      prev.map((t) =>
-        t.id === activeThread.id
-          ? {
-              ...t,
-              lastMessage: textToSend,
-              timestamp: new Date(),
-              messages: [...t.messages, newMessage],
-            }
-          : t
-      )
-    );
-
-    // Send through persistent messageService (updates DB on Render + broadcasts)
-    await messageService.sendMessage({
-      sender_id: user?.id || "parent_user",
-      sender_name: [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Martha Appleseed (Parent)",
-      recipient_id: activeThread.teacherUserId || activeThread.id,
-      recipient_name: activeThread.name,
-      student_name: activeThread.studentName,
-      text: textToSend,
-      channel: "teacher_parent",
-    });
-
-    // Re-sync immediately
-    syncAllThreads();
+      // Synchronize state cleanly
+      await syncAllThreads();
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const generateAISuggestedReply = () => {

@@ -26,7 +26,7 @@ class BaseController {
         // Isolate institutional data by institution_id
         else if (req.user.institution_id && ['classes', 'student_profiles', 'staff_profiles', 'parent_profiles', 'therapist_profiles', 'users', 'institutions'].includes(table)) {
           if (table === 'student_profiles' && req.user.role_name === 'Parent') {
-            additionalWhere = 'institution_id = $1 AND user_id IN (SELECT student_id FROM parent_profiles WHERE user_id = $2)';
+            additionalWhere = 'sp.institution_id = $1 AND (sp.user_id IN (SELECT student_id FROM parent_profiles WHERE parent_profiles.user_id = $2) OR sp.id IN (SELECT student_id FROM parent_profiles WHERE parent_profiles.user_id = $2))';
             params.push(req.user.institution_id, req.user.id);
           } else if (table === 'institutions') {
              additionalWhere = 'id = $1';

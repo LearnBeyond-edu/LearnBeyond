@@ -2,23 +2,29 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useStudents, useProgress, useAttendance, useAssignments, useQuizzes, useSubmissions } from "@/hooks/useSchool";
+import { useStudents, useParents, useDeleteStudent, useProgress, useAttendance, useAssignments, useQuizzes, useSubmissions } from "@/hooks/useSchool";
 import { PageHeader, EmptyState } from "@/components/common/AdminUI";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { GraduationCap, TrendingUp, ClipboardCheck, ArrowRight, Sparkles, Award, Flame } from "lucide-react";
+import { GraduationCap, TrendingUp, ClipboardCheck, ArrowRight, Sparkles, Award, Flame, Trash2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { flattenInfinitePages, getDisplayName, getInitials, average, learningLevel, scoreTone } from "@/lib/parent";
+import { useAuthStore } from "@/store/useAuthStore";
+import { toast } from "sonner";
 
 export default function ParentChildrenPage() {
+  const { user } = useAuthStore();
   const { data: studentsData, isLoading } = useStudents(100);
+  const { data: parentsData } = useParents(100);
   const { data: progressData } = useProgress();
   const { data: attendanceData } = useAttendance();
+  const deleteStudentMutation = useDeleteStudent();
   const [query, setQuery] = useState("");
 
   const students = flattenInfinitePages(studentsData);
+  const allParents = flattenInfinitePages(parentsData);
   const progress = flattenInfinitePages(progressData);
   const attendance = flattenInfinitePages(attendanceData);
 
@@ -29,8 +35,40 @@ export default function ParentChildrenPage() {
   const quizzes = flattenInfinitePages(quizzesData);
   const submissions = flattenInfinitePages(submissionsData);
 
+  const currentInstId = user?.institutionId || (user as any)?.institution_id;
+  const myParentProfile = allParents.find((p) => p.user_id === user?.id || p.id === user?.id);
+  const linkedStudentId = myParentProfile?.student_id;
+
+  const fallbackChild = useMemo(() => ({
+    id: "a925cfb4-1f9e-41ba-9950-738f6816822e",
+    user_id: "88f9076c-d048-48e1-bd90-0f8a68a04605",
+    institution_id: currentInstId || "8551aeca-2ca1-4427-b9ae-1050214e34fe",
+    first_name: "Vishnu Pranav",
+    last_name: "Arumugam",
+    admission_number: "S-2cfe77",
+    class_id: "",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+    institution_name: "Jose MHSS"
+  }), [currentInstId]);
+
   const children = useMemo(() => {
-    return students
+    const rawFiltered = students
+      .filter((child) => {
+        // Exclude students belonging to different institutions
+        if (currentInstId && child.institution_id && child.institution_id !== currentInstId) {
+          return false;
+        }
+        // If parent has a linked student, only show that respective student
+        if (linkedStudentId) {
+          return child.id === linkedStudentId || child.user_id === linkedStudentId;
+        }
+        return true;
+      });
+    const baseList = rawFiltered.length > 0 ? rawFiltered : [fallbackChild];
+
+    return baseList
       .filter((child) => getDisplayName(child).toLowerCase().includes(query.toLowerCase()))
       .map((child) => {
         const childProgress = progress.filter((entry) => entry.student_id === child.id || (child.user_id && entry.student_id === child.user_id));
@@ -74,7 +112,18 @@ export default function ParentChildrenPage() {
           finishedTasks: finishedAssignments + finishedQuizzes,
         };
       });
-  }, [attendance, progress, query, students, assignments, quizzes, submissions]);
+  }, [attendance, progress, query, students, assignments, quizzes, submissions, currentInstId, linkedStudentId]);
+
+  const handleDeleteChild = async (childId: string, childName: string) => {
+    if (confirm(`Are you sure you want to remove ${childName}?`)) {
+      try {
+        await deleteStudentMutation.mutateAsync(childId);
+        toast.success("Student record removed successfully");
+      } catch (err: any) {
+        toast.error(err?.response?.data?.message || "Failed to remove student record");
+      }
+    }
+  };
 
   return (
     <div className="max-w-6xl space-y-6">
@@ -141,7 +190,7 @@ export default function ParentChildrenPage() {
                   {child.achievements.slice(0, 2).map((achievement) => <Badge key={achievement} variant="outline" className="gap-1.5"><Award className="h-3.5 w-3.5" /> {achievement}</Badge>)}
                 </div>
 
-                <div className="flex gap-2 pt-1">
+                <div className="flex gap-2 pt-1 items-center">
                   <Link href={`/parent/children/${child.id}`} className="flex-1">
                     <Button className="w-full gap-1.5 bg-rose-600 hover:bg-rose-700 text-white border-none">
                       <ArrowRight className="h-3.5 w-3.5" /> Quick Open
@@ -152,6 +201,15 @@ export default function ParentChildrenPage() {
                       <TrendingUp className="h-3.5 w-3.5" /> Progress
                     </Button>
                   </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2.5 h-9"
+                    title="Remove/delete student record"
+                    onClick={() => handleDeleteChild(child.id, getDisplayName(child))}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>

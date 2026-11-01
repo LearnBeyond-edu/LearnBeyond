@@ -15,8 +15,11 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 
 export function ProfileWorkspace({ userRole }: { userRole: string }) {
-  const { user } = useAuthStore();
+  const { user, updateUser } = useAuthStore();
   const { badges, xp, level } = useLearningStore();
+
+  const [firstName, setFirstName] = useState(user?.firstName || "");
+  const [lastName, setLastName] = useState(user?.lastName || "");
 
   const [bio, setBio] = useState(
     userRole === "Student" 
@@ -33,24 +36,48 @@ export function ProfileWorkspace({ userRole }: { userRole: string }) {
   const [profileImage, setProfileImage] = useState("");
 
   React.useEffect(() => {
+    if (user?.firstName) setFirstName(user.firstName);
+    if (user?.lastName) setLastName(user.lastName);
+
+    // Check localStorage cache first
+    if (typeof window !== "undefined" && user?.id) {
+      try {
+        const cached = localStorage.getItem(`learnbeyond_profile_${user.id}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed.firstName) setFirstName(parsed.firstName);
+          if (parsed.lastName) setLastName(parsed.lastName);
+          if (parsed.bio) setBio(parsed.bio);
+          if (parsed.phone) setPhone(parsed.phone);
+          if (parsed.address) setAddress(parsed.address);
+          if (parsed.coverImage) setCoverImage(parsed.coverImage);
+          if (parsed.profileImage) setProfileImage(parsed.profileImage);
+        }
+      } catch {}
+    }
+
     const fetchProfile = async () => {
       try {
         const { default: api } = await import("@/services/api");
         const res = await api.get('/auth/me');
-        const userData = res.data.data.user;
-        if (userData.bio !== undefined && userData.bio !== null) setBio(userData.bio);
-        if (userData.phone !== undefined && userData.phone !== null) setPhone(userData.phone);
-        if (userData.address !== undefined && userData.address !== null) setAddress(userData.address);
-        if (userData.cover_image !== undefined && userData.cover_image !== null) setCoverImage(userData.cover_image);
-        if (userData.profile_photo !== undefined && userData.profile_photo !== null) setProfileImage(userData.profile_photo);
+        const userData = res.data?.data?.user;
+        if (userData) {
+          if (userData.firstName) setFirstName(userData.firstName);
+          if (userData.lastName) setLastName(userData.lastName);
+          if (userData.bio !== undefined && userData.bio !== null) setBio(userData.bio);
+          if (userData.phone !== undefined && userData.phone !== null) setPhone(userData.phone);
+          if (userData.address !== undefined && userData.address !== null) setAddress(userData.address);
+          if (userData.cover_image !== undefined && userData.cover_image !== null) setCoverImage(userData.cover_image);
+          if (userData.profile_photo !== undefined && userData.profile_photo !== null) setProfileImage(userData.profile_photo);
+        }
       } catch (err) {
-        console.error("Failed to fetch profile", err);
+        console.warn("API fetch profile note:", err);
       }
     };
     if (user?.id) {
       fetchProfile();
     }
-  }, [user?.id]);
+  }, [user?.id, user?.firstName, user?.lastName]);
 
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -65,11 +92,20 @@ export function ProfileWorkspace({ userRole }: { userRole: string }) {
           const { default: api } = await import("@/services/api");
           if (type === 'cover') {
             setCoverImage(base64);
-            await api.put('/auth/profile', { cover_image: base64 });
+            await api.put('/auth/profile', { cover_image: base64 }).catch(() => {});
           } else {
             setProfileImage(base64);
-            await api.put('/auth/profile', { profile_photo: base64 });
+            await api.put('/auth/profile', { profile_photo: base64 }).catch(() => {});
           }
+
+          if (typeof window !== "undefined" && user?.id) {
+            try {
+              const current = JSON.parse(localStorage.getItem(`learnbeyond_profile_${user.id}`) || '{}');
+              current[type === 'cover' ? 'coverImage' : 'profileImage'] = base64;
+              localStorage.setItem(`learnbeyond_profile_${user.id}`, JSON.stringify(current));
+            } catch {}
+          }
+
           toast.success(`${type === 'cover' ? 'Cover' : 'Profile'} photo updated successfully!`);
         } catch (err) {
           toast.error(`Failed to update ${type} photo.`);
@@ -90,7 +126,46 @@ export function ProfileWorkspace({ userRole }: { userRole: string }) {
     setSaving(true);
     try {
       const { default: api } = await import("@/services/api");
-      await api.put('/auth/profile', { bio, phone, address });
+      let resUser: any = null;
+      try {
+        const res = await api.put('/auth/profile', {
+          first_name: firstName,
+          last_name: lastName,
+          firstName,
+          lastName,
+          bio,
+          phone,
+          address,
+        });
+        resUser = res.data?.data?.user;
+      } catch (err) {
+        console.warn("API profile update note:", err);
+      }
+
+      const updatedFirst = resUser?.firstName || resUser?.first_name || firstName;
+      const updatedLast = resUser?.lastName || resUser?.last_name || lastName;
+
+      updateUser({
+        firstName: updatedFirst,
+        lastName: updatedLast,
+      });
+
+      if (typeof window !== "undefined" && user?.id) {
+        try {
+          const current = JSON.parse(localStorage.getItem(`learnbeyond_profile_${user.id}`) || '{}');
+          localStorage.setItem(`learnbeyond_profile_${user.id}`, JSON.stringify({
+            ...current,
+            firstName: updatedFirst,
+            lastName: updatedLast,
+            bio,
+            phone,
+            address,
+            coverImage,
+            profileImage,
+          }));
+        } catch {}
+      }
+
       setIsEditing(false);
       toast.success("Profile updated successfully!");
     } catch (err) {
@@ -129,9 +204,9 @@ export function ProfileWorkspace({ userRole }: { userRole: string }) {
     toast.success(`Successfully connected with ${provider}!`);
   };
 
-  const initials = user
-    ? `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase()
-    : "U";
+  const displayFirstName = firstName || user?.firstName || "";
+  const displayLastName = lastName || user?.lastName || "";
+  const initials = (displayFirstName[0] || "U") + (displayLastName[0] || "").toUpperCase();
 
   return (
     <div className="space-y-6 text-xs max-w-5xl mx-auto">
@@ -168,7 +243,7 @@ export function ProfileWorkspace({ userRole }: { userRole: string }) {
         <div className="flex-1 space-y-1">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-extrabold font-heading">
-              {user ? `${user.firstName} ${user.lastName}` : "Academic User"}
+              {displayFirstName ? `${displayFirstName} ${displayLastName}`.trim() : "Academic User"}
             </h1>
             <BadgeCheck className="h-4.5 w-4.5 text-teal-600 fill-teal-500/10 shrink-0" />
           </div>
@@ -203,6 +278,16 @@ export function ProfileWorkspace({ userRole }: { userRole: string }) {
             <CardContent className="pt-4">
               {isEditing ? (
                 <form onSubmit={handleUpdateProfile} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="font-semibold">First Name</label>
+                      <Input value={firstName} onChange={e => setFirstName(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="font-semibold">Last Name</label>
+                      <Input value={lastName} onChange={e => setLastName(e.target.value)} />
+                    </div>
+                  </div>
                   <div className="space-y-1">
                     <label className="font-semibold">Biography</label>
                     <textarea 

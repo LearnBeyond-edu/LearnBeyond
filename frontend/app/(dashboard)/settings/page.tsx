@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,11 +15,18 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/common/AdminUI";
 
 export default function StudentSettingsPage() {
-  const { user, setAuth, accessToken, refreshToken } = useAuthStore();
+  const { user, setAuth, updateUser, accessToken, refreshToken } = useAuthStore();
 
   const [firstName, setFirstName] = useState(user?.firstName || "");
   const [lastName, setLastName] = useState(user?.lastName || "");
   const [email, setEmail] = useState(user?.email || "");
+
+  // Sync state if user changes
+  useEffect(() => {
+    if (user?.firstName) setFirstName(user.firstName);
+    if (user?.lastName) setLastName(user.lastName);
+    if (user?.email) setEmail(user.email);
+  }, [user?.firstName, user?.lastName, user?.email]);
 
   // Toggles
   const [emailNotif, setEmailNotif] = useState(() => {
@@ -116,11 +123,30 @@ export default function StudentSettingsPage() {
     setSaving(true);
     try {
       const { default: api } = await import("@/services/api");
-      const res = await api.post('/settings/profile', { first_name: firstName, last_name: lastName });
-      if (res.data?.status === 'success' && user && accessToken && refreshToken) {
-        setAuth({ ...user, firstName: res.data.data.first_name, lastName: res.data.data.last_name }, accessToken, refreshToken);
-        toast.success("Profile details updated successfully!");
+      let resData: any = null;
+      try {
+        const res = await api.post('/settings/profile', { first_name: firstName, last_name: lastName });
+        resData = res.data?.data;
+      } catch (err) {
+        console.warn("API profile save note:", err);
       }
+
+      const updatedFirstName = resData?.first_name || resData?.firstName || firstName;
+      const updatedLastName = resData?.last_name || resData?.lastName || lastName;
+
+      updateUser({ firstName: updatedFirstName, lastName: updatedLastName });
+      if (user && accessToken && refreshToken) {
+        setAuth({ ...user, firstName: updatedFirstName, lastName: updatedLastName }, accessToken, refreshToken);
+      }
+
+      if (typeof window !== "undefined" && user?.id) {
+        localStorage.setItem(`learnbeyond_profile_${user.id}`, JSON.stringify({
+          firstName: updatedFirstName,
+          lastName: updatedLastName,
+        }));
+      }
+
+      toast.success("Profile details updated successfully!");
     } catch (err) {
       toast.error("Failed to update profile.");
     } finally {

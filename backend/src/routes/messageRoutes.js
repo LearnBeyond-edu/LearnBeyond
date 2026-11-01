@@ -76,7 +76,17 @@ router.post('/', async (req, res, next) => {
   try {
     await ensureTable();
     const senderId = req.user.id;
-    const senderName = [req.user.first_name, req.user.last_name].filter(Boolean).join(' ') || req.user.email || 'User';
+    let senderName = req.body.sender_name;
+    if (!senderName || senderName === 'User') {
+      try {
+        const u = await query('SELECT first_name, last_name, email FROM users WHERE id = $1', [senderId]);
+        if (u.rows.length > 0) {
+          senderName = [u.rows[0].first_name, u.rows[0].last_name].filter(Boolean).join(' ') || u.rows[0].email;
+        }
+      } catch (e) {}
+    }
+    senderName = senderName || 'User';
+
     const { recipient_id, recipient_name, student_name, text, channel = 'teacher_parent' } = req.body;
 
     if (!recipient_id || !text) {

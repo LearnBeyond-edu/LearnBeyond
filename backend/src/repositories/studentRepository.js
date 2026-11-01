@@ -24,15 +24,20 @@ class StudentRepository extends BaseRepository {
       paramIndex++;
     }
 
-    if (whereConditions.length > 0) {
-      queryStr += ` WHERE ${whereConditions.join(' AND ')}`;
+    const allWhere = [...whereConditions];
+    if (additionalWhere) {
+      const modWhere = additionalWhere
+        .replace(/(?<![\w\.])institution_id\b/g, 'sp.institution_id')
+        .replace(/(?<![\w\.])user_id\b/g, 'sp.user_id')
+        .replace(/(?<![\w\.])id\b(?!\s*<)/g, 'sp.id');
+      const cleanModWhere = modWhere.trim().replace(/^AND\s+/i, '');
+      if (cleanModWhere) {
+        allWhere.push(cleanModWhere);
+      }
     }
 
-    if (additionalWhere) {
-      const modWhere = additionalWhere.replace(/institution_id/g, 'u.institution_id');
-      queryStr += modWhere.trim().toUpperCase().startsWith('AND') 
-        ? ` ${modWhere}` 
-        : ` AND ${modWhere}`;
+    if (allWhere.length > 0) {
+      queryStr += ` WHERE ${allWhere.join(' AND ')}`;
     }
 
     queryStr += ` ORDER BY sp.id DESC LIMIT $${paramIndex}`;
@@ -76,8 +81,20 @@ class StudentRepository extends BaseRepository {
     const { query } = require('../config/db');
     const profile = await this.findById(id);
     if (profile) {
-      await query(`DELETE FROM student_profiles WHERE id = $1`, [id]);
-      await query(`DELETE FROM users WHERE id = $1`, [profile.user_id]);
+      const studentId = profile.id;
+      const userId = profile.user_id;
+
+      // Clean up all related child records first to prevent FK constraint failures
+      await query(`DELETE FROM attendance WHERE student_id = $1 OR student_id = $2`, [studentId, userId]).catch(() => {});
+      await query(`DELETE FROM progress WHERE student_id = $1 OR student_id = $2`, [studentId, userId]).catch(() => {});
+      await query(`DELETE FROM submissions WHERE student_id = $1 OR student_id = $2`, [studentId, userId]).catch(() => {});
+      await query(`DELETE FROM quiz_attempts WHERE student_id = $1 OR student_id = $2`, [studentId, userId]).catch(() => {});
+      await query(`DELETE FROM enrollments WHERE student_id = $1 OR student_id = $2`, [studentId, userId]).catch(() => {});
+      await query(`DELETE FROM direct_messages WHERE sender_id = $1 OR recipient_id = $1`, [userId]).catch(() => {});
+      await query(`DELETE FROM notifications WHERE user_id = $1`, [userId]).catch(() => {});
+      await query(`DELETE FROM parent_profiles WHERE student_id = $1 OR student_id = $2`, [studentId, userId]).catch(() => {});
+      await query(`DELETE FROM student_profiles WHERE id = $1`, [studentId]);
+      await query(`DELETE FROM users WHERE id = $1`, [userId]);
     }
   }
 }

@@ -23,8 +23,10 @@ const allowedOrigins = [
 ].filter(Boolean);
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like curl / Postman) and our allowed list
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    // Allow requests with no origin (like mobile/curl), allowed list, and Netlify/Render domains
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.netlify.app') || origin.endsWith('.onrender.com')) {
+      return callback(null, true);
+    }
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true

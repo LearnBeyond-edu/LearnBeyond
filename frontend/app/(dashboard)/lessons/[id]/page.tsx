@@ -24,6 +24,7 @@ import {
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { buildLessonCurriculum } from "@/lib/lessonCurriculumEngine";
+import { formatReadableContent, getDisplayPreviewContent } from "@/lib/lessonContentHelper";
 
 // ==========================================
 // TACTILE TOUCH & FEEL PHYSICS SANDBOX (FLAWLESS & RESPONSIVE)
@@ -1841,7 +1842,7 @@ export default function LessonViewerPage() {
                 </div>
 
                 <div className="text-lg sm:text-xl leading-loose text-foreground/90 whitespace-pre-wrap font-serif first-letter:text-7xl first-letter:font-extrabold first-letter:text-teal-600 first-letter:mr-4 first-letter:float-left first-letter:leading-[0.8] clear-none">
-                  {lesson.content || "Welcome to the Lesson. The core structures outlined here cover basic concepts and their functions in greater detail. Dive into the material below to unlock your next achievement."}
+                  {getDisplayPreviewContent(formatReadableContent(lesson.content)) || "Welcome to the Lesson. The core structures outlined here cover basic concepts and their functions in greater detail. Dive into the material below to unlock your next achievement."}
                 </div>
               </div>
 

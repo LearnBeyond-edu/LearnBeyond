@@ -59,46 +59,23 @@ class InstitutionRepository {
   }
 
   async delete(id) {
-    const client = await getClient();
-    try {
-      await client.query('BEGIN');
-      
-      // Nullify references in classes and lessons to avoid FK violations
-      await client.query(`UPDATE classes SET class_teacher_id = NULL WHERE institution_id = $1`, [id]);
-      await client.query(`UPDATE lessons SET class_id = NULL WHERE class_id IN (SELECT id FROM classes WHERE institution_id = $1)`, [id]);
-      
-      // Delete progress, submissions, attendance
-      await client.query(`DELETE FROM progress WHERE student_id IN (SELECT id FROM student_profiles WHERE user_id IN (SELECT id FROM users WHERE institution_id = $1))`, [id]);
-      await client.query(`DELETE FROM submissions WHERE student_id IN (SELECT id FROM student_profiles WHERE user_id IN (SELECT id FROM users WHERE institution_id = $1))`, [id]);
-      await client.query(`DELETE FROM attendance WHERE class_id IN (SELECT id FROM classes WHERE institution_id = $1)`, [id]);
-      
-      // Delete assignments, quizzes, lessons
-      await client.query(`DELETE FROM assignments WHERE class_id IN (SELECT id FROM classes WHERE institution_id = $1)`, [id]);
-      await client.query(`DELETE FROM quizzes WHERE class_id IN (SELECT id FROM classes WHERE institution_id = $1)`, [id]);
-      await client.query(`DELETE FROM lessons WHERE class_id IN (SELECT id FROM classes WHERE institution_id = $1)`, [id]);
-      
-      // Delete classes
-      await client.query(`DELETE FROM classes WHERE institution_id = $1`, [id]);
-      
-      // Delete profiles
-      await client.query(`DELETE FROM student_profiles WHERE user_id IN (SELECT id FROM users WHERE institution_id = $1)`, [id]);
-      await client.query(`DELETE FROM staff_profiles WHERE user_id IN (SELECT id FROM users WHERE institution_id = $1)`, [id]);
-      await client.query(`DELETE FROM parent_profiles WHERE user_id IN (SELECT id FROM users WHERE institution_id = $1)`, [id]);
-      await client.query(`DELETE FROM therapist_profiles WHERE user_id IN (SELECT id FROM users WHERE institution_id = $1)`, [id]);
-      
-      // Delete users
-      await client.query(`DELETE FROM users WHERE institution_id = $1`, [id]);
-      
-      // Delete institution
-      await client.query(`DELETE FROM institutions WHERE id = $1`, [id]);
-      
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
+    const result = await query(
+      `UPDATE institutions 
+       SET deleted_at = NOW(), 
+           account_status = 'Inactive', 
+           updated_at = NOW() 
+       WHERE id = $1 
+       RETURNING *`,
+      [id]
+    );
+    await query(
+      `UPDATE users 
+       SET is_active = false, 
+           updated_at = NOW() 
+       WHERE institution_id = $1`,
+      [id]
+    );
+    return result.rows[0];
   }
 }
 

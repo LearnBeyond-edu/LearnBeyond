@@ -41,6 +41,8 @@ export default function TherapistSessionsPage() {
         .map((r: any) => ({
           id: r.id,
           student: r.studentName,
+          studentId: r.studentId,
+          studentUserId: r.studentUserId || r.userId,
           type: "Clinical Support Referral",
           date: r.date || new Date().toISOString().split("T")[0],
           time: r.time,
@@ -57,14 +59,24 @@ export default function TherapistSessionsPage() {
 
   const filtered = sessions.filter(s => s.status === activeTab);
 
+  const activeStudent = students.find((s: any) => {
+    const sName = getDisplayName(s).toLowerCase();
+    const targetName = (activeSession?.student || "").toLowerCase();
+    return sName === targetName || (s.id && s.id === activeSession?.studentId) || (s.user_id && s.user_id === activeSession?.studentUserId);
+  });
+
   const handleScheduleSessionSubmit = () => {
     if (!formStudent || !formDate || !formTime) {
       return toast.error("Please fill out all fields");
     }
+    const matchedStudent = students.find((s: any) => getDisplayName(s) === formStudent);
     const refs = JSON.parse(localStorage.getItem("therapist-referrals") || "[]");
     refs.push({
       id: "session-" + Date.now(),
       studentName: formStudent,
+      studentId: matchedStudent?.id,
+      studentUserId: matchedStudent?.user_id,
+      userId: matchedStudent?.user_id,
       status: "scheduled",
       date: formDate,
       time: formTime
@@ -107,14 +119,43 @@ export default function TherapistSessionsPage() {
               </div>
             }
           />
-          <TeletherapyRoom recipientName={activeSession.student} role="therapist" />
+          <TeletherapyRoom 
+            recipientName={activeSession.student} 
+            recipientId={activeSession.studentUserId || activeSession.studentId || activeStudent?.user_id || activeStudent?.id}
+            role="therapist" 
+            sessionId={activeSession.id} 
+          />
         </>
       ) : (
         <>
           <PageHeader
             title="Therapy Sessions"
             subtitle="Manage your schedule, conduct sessions, and review clinical history"
-            actions={<Button onClick={() => setIsScheduleOpen(true)} className="bg-teal-600 hover:bg-teal-700 text-white gap-2"><Plus className="h-4 w-4" /> Schedule Session</Button>}
+            actions={
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => {
+                    const st = students[0];
+                    setActiveSession({
+                      id: "live-teletherapy-" + (st?.user_id || "88f9076c-d048-48e1-bd90-0f8a68a04605"),
+                      student: (st ? getDisplayName(st) : "") || "Vishnu Pranav Arumugam",
+                      studentUserId: st?.user_id || "88f9076c-d048-48e1-bd90-0f8a68a04605",
+                      studentId: st?.id,
+                      type: "Live Clinical Consultation",
+                      time: "Now",
+                      duration: "45 min",
+                      status: "upcoming"
+                    });
+                  }} 
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                >
+                  <Video className="h-4 w-4" /> Open Teletherapy Room
+                </Button>
+                <Button onClick={() => setIsScheduleOpen(true)} className="bg-teal-600 hover:bg-teal-700 text-white gap-2">
+                  <Plus className="h-4 w-4" /> Schedule Session
+                </Button>
+              </div>
+            }
           />
 
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-between border-b pb-4">
@@ -133,8 +174,26 @@ export default function TherapistSessionsPage() {
         <div className="md:col-span-2 space-y-4">
           {filtered.length === 0 ? (
             <Card className="border-border/60">
-              <CardContent className="p-8">
-                <EmptyState icon={<HeartPulse className="h-10 w-10" />} title="No sessions found" description={`You have no ${activeTab} sessions.`} />
+              <CardContent className="p-8 text-center flex flex-col items-center">
+                <EmptyState icon={<HeartPulse className="h-10 w-10 text-muted-foreground" />} title="No sessions found" description={`You have no ${activeTab} sessions.`} />
+                <Button 
+                  className="mt-4 bg-teal-600 hover:bg-teal-700 text-white gap-2"
+                  onClick={() => {
+                    const st = students[0];
+                    setActiveSession({
+                      id: "live-teletherapy-" + (st?.user_id || "88f9076c-d048-48e1-bd90-0f8a68a04605"),
+                      student: (st ? getDisplayName(st) : "") || "Vishnu Pranav Arumugam",
+                      studentUserId: st?.user_id || "88f9076c-d048-48e1-bd90-0f8a68a04605",
+                      studentId: st?.id,
+                      type: "Live Clinical Consultation",
+                      time: "Now",
+                      duration: "45 min",
+                      status: "upcoming"
+                    });
+                  }}
+                >
+                  <Video className="h-4 w-4" /> Enter Live Teletherapy Room
+                </Button>
               </CardContent>
             </Card>
           ) : (
